@@ -7,6 +7,12 @@ function num(v: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function bool(v: unknown, fallback: boolean): boolean {
+  if (v === undefined || v === null || v === '') return fallback;
+  if (typeof v === 'boolean') return v;
+  return /^(1|true|yes|on)$/i.test(String(v).trim());
+}
+
 function str(v: unknown, fallback: string): string {
   // TOML vars can arrive as numbers/booleans (e.g. an unquoted channel id),
   // so coerce defensively instead of assuming a string.
@@ -39,6 +45,8 @@ export function loadConfig(env: Env): Config {
     captionLang: str(env.CAPTION_LANG, 'ru'),
     captionTone: str(env.CAPTION_TONE, 'живой, тёплый, без кликбейта'),
     sourceLabel: str(env.SOURCE_LABEL, 'Источник'),
+    creditText: str(env.CREDIT_TEXT, '@monkeydiary'),
+    creditUrl: str(env.CREDIT_URL, 'https://t.me/monkeydiary'),
     maxAgeHours: num(env.MAX_AGE_HOURS, 24),
     maxPostsPerRun: Math.max(0, num(env.MAX_POSTS_PER_RUN, 2)),
     maxPostsPerDay: Math.max(0, num(env.MAX_POSTS_PER_DAY, 4)),
@@ -49,13 +57,25 @@ export function loadConfig(env: Env): Config {
     dailyNeuronBudget: num(env.DAILY_NEURON_BUDGET, 9000),
     textModel: str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast'),
     imageModel: str(env.IMAGE_MODEL, '@cf/black-forest-labs/flux-1-schnell'),
+    // Free diffusion model used when the neuron budget is low or the primary
+    // model fails. Keeps the AI-generated look (unlike og:image).
+    imageModelFallback: str(env.IMAGE_MODEL_FALLBACK, '@cf/bytedance/stable-diffusion-xl-lightning'),
     imageSteps: Math.min(8, Math.max(1, num(env.IMAGE_STEPS, 4))),
+    imageStepsFallback: Math.max(1, num(env.IMAGE_STEPS_FALLBACK, 8)),
+    // Target dimensions for models that accept width/height (SDXL family).
+    // NOTE: flux-1-schnell ignores these and always returns a square image.
+    imageWidth: num(env.IMAGE_WIDTH, 1280),
+    imageHeight: num(env.IMAGE_HEIGHT, 720),
+    watermarkEnabled: bool(env.WATERMARK_ENABLED, true),
+    watermarkOpacity: Math.min(1, Math.max(0, num(env.WATERMARK_OPACITY, 0.55))),
+    watermarkPadding: Math.max(0, num(env.WATERMARK_PADDING, 28)),
     historyRetentionDays: num(env.HISTORY_RETENTION_DAYS, 30),
     est: {
       rank: num(env.EST_NEURONS_RANK, 60),
       caption: num(env.EST_NEURONS_CAPTION, 30),
       imagePrompt: num(env.EST_NEURONS_IMAGE_PROMPT, 15),
       image: num(env.EST_NEURONS_IMAGE, 150),
+      imageFallback: num(env.EST_NEURONS_IMAGE_FALLBACK, 0),
     },
   };
 }

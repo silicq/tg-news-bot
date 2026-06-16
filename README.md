@@ -37,24 +37,32 @@ cron → fetchFeeds() → parseItems() → filterAlreadyPosted (D1)
 ```
 .
 ├── src/
-│   ├── index.ts      # точка входа: scheduled() + ручной HTTP-триггер /run
-│   ├── config.ts     # парсинг env → типизированный Config
-│   ├── types.ts      # общие типы + интерфейс Env
-│   ├── ai.ts         # обёртка над env.AI.run + парсинг JSON-ответа
-│   ├── feeds.ts      # fetch + парсер RSS 2.0 и Atom (терпим к кривому XML)
-│   ├── dedup.ts      # хэш-ключи, фильтр уже опубликованного, запись истории
-│   ├── ranking.ts    # отбор интересного (1 батч-вызов модели)
-│   ├── caption.ts    # генерация подписи + сборка с лимитом 1024 и ссылкой
-│   ├── image.ts      # промпт картинки, генерация, og:image-фолбэк
-│   ├── telegram.ts   # sendPhoto (multipart) и sendMessage
-│   ├── budget.ts     # бюджет нейронов за сутки (D1), защита от превышения
-│   └── util.ts       # хэши, base64, XML/HTML-хелперы, обрезка текста
+│   ├── index.ts           # точка входа: scheduled() + HTTP (/run, /setup, вебхук)
+│   ├── config.ts          # парсинг env → типизированный Config
+│   ├── types.ts           # общие типы + интерфейс Env
+│   ├── ai.ts              # обёртка над env.AI.run + парсинг JSON-ответа
+│   ├── feeds.ts           # fetch + парсер RSS 2.0 и Atom (терпим к кривому XML)
+│   ├── dedup.ts           # хэш-ключи, фильтр уже опубликованного, запись истории
+│   ├── ranking.ts         # отбор интересного (1 батч-вызов модели)
+│   ├── caption.ts         # подпись + сборка с лимитом 1024, ссылка + @monkeydiary
+│   ├── image.ts           # промпт, генерация (flux→SDXL-фолбэк→og), вотермарка
+│   ├── telegram.ts        # sendPhoto/sendMessage + getChat/getMe/setWebhook
+│   ├── admin.ts           # команды /test и /stats
+│   ├── budget.ts          # бюджет нейронов за сутки (D1), защита от превышения
+│   ├── schema.ts          # самосоздание таблиц D1 (миграция не нужна)
+│   ├── watermark-asset.ts # ВШИТАЯ base64-вотермарка (генерится скриптом)
+│   └── util.ts            # хэши, base64, XML/HTML-хелперы, обрезка текста
+├── assets/
+│   ├── fonts/GlinaScript.ttf  # шрифт вотермарки (нужен только скрипту)
+│   └── watermark.png          # отрендеренная вотермарка (для справки)
+├── scripts/
+│   └── make-watermark.mjs     # рендерит вотермарку → src/watermark-asset.ts
 ├── migrations/
-│   └── 0001_init.sql # таблицы posted и budget
-├── wrangler.toml     # биндинги (D1, AI), cron, vars
+│   └── 0001_init.sql      # таблицы posted и budget (применять необязательно)
+├── wrangler.toml          # биндинги (D1, AI, Images), cron, vars
 ├── package.json
 ├── tsconfig.json
-├── .dev.vars.example # шаблон секретов для локалки (.dev.vars в .gitignore)
+├── .dev.vars.example      # шаблон секретов для локалки (.dev.vars в .gitignore)
 └── .gitignore
 ```
 
@@ -258,6 +266,63 @@ https://tg-news-bot.<ваш-сабдомен>.workers.dev/setup?token=ВАШ_MAN
 
 ---
 
+## Картинки: формат, фолбэк-модели и вотермарка
+
+### Какая модель и какой размер
+
+| Модель | Когда | Размер | Нейроны |
+|---|---|---|---|
+| `flux-1-schnell` (по умолч.) | основная, ради «AI-look» | **только квадрат** 1024×1024 | платная (дёшево) |
+| `stable-diffusion-xl-lightning` | фолбэк при нехватке бюджета или ошибке | 16:9 (`IMAGE_WIDTH×IMAGE_HEIGHT`) | **бесплатно** |
+
+Важно: **flux-1-schnell не умеет задавать ширину/высоту** — у него в схеме только
+`prompt` и `steps`, выход всегда квадратный. `IMAGE_WIDTH`/`IMAGE_HEIGHT` (по умолч.
+1280×720) применяются к моделям SDXL-семейства. Поэтому:
+
+- хочешь **16:9 на каждом посте** → поставь `IMAGE_MODEL` в SDXL-модель
+  (напр. `@cf/bytedance/stable-diffusion-xl-lightning` — бесплатная и быстрая,
+  либо `@cf/stabilityai/stable-diffusion-xl-base-1.0` — медленнее, качественнее);
+- хочешь **flux-качество** → оставь flux, но картинки будут квадратные (16:9
+  включится только на бесплатном фолбэке у лимита).
+
+### Цепочка получения картинки (режим `generate`)
+
+```
+flux (если есть бюджет)  →  бесплатная SDXL-модель  →  og:image со страницы  →  без фото
+```
+
+Бесплатные diffusion-модели позволяют постить «AI-слоп» практически без расхода
+нейронов, когда дневной бюджет на исходе — канал не встаёт.
+
+### Вотермарка @monkeydiary
+
+Накладывается **не в воркере**, а через биндинг **Cloudflare Images**
+(`env.IMAGES`). Причина: бесплатный тариф Workers даёт лишь **10 мс CPU** на запуск
+— этого не хватит на пиксельную обработку. Images-биндинг считает картинку на
+своей стороне (не тратит CPU воркера) и бесплатен до **5000 трансформаций/мес**
+(у нас — десятки в день).
+
+- текст/шрифт вшиты как PNG в `src/watermark-asset.ts`;
+- цвет светло-серый, полупрозрачный (`WATERMARK_OPACITY`), в **случайном углу** с
+  отступом (`WATERMARK_PADDING`);
+- шрифт — **Glina Script Em** (`assets/fonts/GlinaScript.ttf`), нужен только
+  скрипту, на Cloudflare не загружается.
+
+**Сменить текст/шрифт/цвет вотермарки:**
+
+```bash
+node scripts/make-watermark.mjs "@monkeydiary" "assets/fonts/GlinaScript.ttf" "#d2d2d2" 60
+# пересоздаст assets/watermark.png и src/watermark-asset.ts → потом git push
+```
+
+> og:image-фолбэк отправляется ссылкой и **не** вотермаркится (Telegram сам тянет
+> картинку). Вотермарка ставится только на сгенерированные ИИ изображения.
+
+Биндинг Images **не требует создания ресурса** — он включён на free-плане по
+умолчанию. Просто оставьте блок `[images]` в `wrangler.toml`.
+
+---
+
 ## Конфигурация
 
 Всё задаётся через `wrangler.toml` (`[vars]`) и секреты.
@@ -273,26 +338,34 @@ https://tg-news-bot.<ваш-сабдомен>.workers.dev/setup?token=ВАШ_MAN
 | `CAPTION_LANG` | var | Язык подписи | `ru` |
 | `CAPTION_TONE` | var | Тон подписи | живой, без кликбейта |
 | `SOURCE_LABEL` | var | Текст ссылки на источник | `Источник` |
+| `CREDIT_TEXT` | var | Кредит канала в подписи (ссылкой) | `@monkeydiary` |
+| `CREDIT_URL` | var | URL для кредита | `https://t.me/monkeydiary` |
 | `MAX_AGE_HOURS` | var | Брать записи не старше N часов | `24` |
 | `MAX_POSTS_PER_RUN` | var | Лимит постов за один запуск | `2` |
-| `MAX_POSTS_PER_DAY` | var | Лимит постов за сутки | `4` |
+| `MAX_POSTS_PER_DAY` | var | Лимит постов за сутки | `8` |
 | `MIN_SCORE` | var | Мин. AI-оценка (0–100) для публикации | `55` |
 | `IMAGE_MODE` | var | `generate` или `og_first` | `generate` |
-| `OG_FALLBACK_NEURON_THRESHOLD` | var | Ниже этого остатка нейронов — берём og:image | `2000` |
+| `OG_FALLBACK_NEURON_THRESHOLD` | var | Ниже этого остатка — фолбэк-модель/og:image | `2000` |
 | `NO_IMAGE_BEHAVIOR` | var | Нет картинки совсем: `og` / `text` / `skip` | `og` |
 | `DAILY_NEURON_BUDGET` | var | Дневной бюджет нейронов (из 10 000) | `9000` |
 | `TEXT_MODEL` | var | ID текстовой модели Workers AI | `@cf/meta/llama-3.1-8b-instruct-fast` |
-| `IMAGE_MODEL` | var | ID image-модели Workers AI | `@cf/black-forest-labs/flux-1-schnell` |
-| `IMAGE_STEPS` | var | Шагов диффузии (flux: 1–8) | `4` |
-| `EST_NEURONS_*` | var | Оценки стоимости шагов (см. ниже) | 60/30/15/150 |
+| `IMAGE_MODEL` | var | Основная image-модель (flux = квадрат) | `@cf/black-forest-labs/flux-1-schnell` |
+| `IMAGE_MODEL_FALLBACK` | var | Бесплатная SDXL-модель у лимита (16:9) | `@cf/bytedance/stable-diffusion-xl-lightning` |
+| `IMAGE_STEPS` | var | Шагов диффузии flux (1–8) | `4` |
+| `IMAGE_STEPS_FALLBACK` | var | `num_steps` для фолбэк-модели | `8` |
+| `IMAGE_WIDTH` / `IMAGE_HEIGHT` | var | Размер для SDXL-моделей (flux игнорит) | `1280` / `720` |
+| `WATERMARK_ENABLED` | var | Включить вотермарку | `true` |
+| `WATERMARK_OPACITY` | var | Прозрачность вотермарки (0–1) | `0.55` |
+| `WATERMARK_PADDING` | var | Отступ вотермарки от края, px | `28` |
+| `EST_NEURONS_*` | var | Оценки стоимости шагов (см. ниже) | 60/30/15/150/0 |
 | `HISTORY_RETENTION_DAYS` | var | Через сколько дней чистить историю в D1 | `30` |
 
 ### Режимы картинки
 
-- **`generate`** (по умолчанию): генерируем картинку через Workers AI. Если
-  дневной бюджет на исходе (`OG_FALLBACK_NEURON_THRESHOLD`) **или** генерация
-  упала — пытаемся вытащить `og:image` со страницы статьи (это бесплатно по
-  нейронам). Если og нет — действуем по `NO_IMAGE_BEHAVIOR`.
+- **`generate`** (по умолчанию): основная модель (flux) → при нехватке бюджета
+  (`OG_FALLBACK_NEURON_THRESHOLD`) или ошибке — **бесплатная SDXL-модель** →
+  затем `og:image` со страницы → если ничего нет, действуем по
+  `NO_IMAGE_BEHAVIOR`. Подробнее — раздел [Картинки](#картинки-формат-фолбэк-модели-и-вотермарка).
 - **`og_first`**: сначала пытаемся `og:image` (бесплатно), генерацию используем
   только если og нет. Сильно растягивает фритир и позволяет много постов.
 
@@ -393,8 +466,9 @@ npm run dev            # локальный запуск (wrangler dev)
 npm run deploy         # деплой
 npm run typecheck      # tsc --noEmit
 npm run migrate:local  # миграция D1 (локальная)
-npm run migrate:remote # миграция D1 (прод)
+npm run migrate:remote # миграция D1 (прод, необязательно — схема самосоздаётся)
 npx wrangler tail      # живые логи задеплоенного воркера
+node scripts/make-watermark.mjs  # пересобрать вотермарку (после смены текста/шрифта)
 ```
 
 ## Траблшутинг

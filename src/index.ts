@@ -4,7 +4,7 @@ import { buildCaption, buildMessage, makeCaption } from './caption';
 import { assertConfig, loadConfig } from './config';
 import { cleanupHistory, filterUnposted, recordPosted } from './dedup';
 import { fetchAllFeeds } from './feeds';
-import { acquireImage } from './image';
+import { acquireImage, applyWatermark } from './image';
 import { rankItems } from './ranking';
 import { ensureSchema } from './schema';
 import { sendMessage, sendPhoto, setWebhook } from './telegram';
@@ -241,9 +241,11 @@ async function publishItem(
 
   const caption = buildCaption(captionBody, item.link, cfg);
   if (image.kind === 'url') {
+    // og:image is a remote URL (rare fallback) — sent as-is, not watermarked.
     await sendPhoto(env, cfg.channelId, image.url, caption);
   } else {
-    await sendPhoto(env, cfg.channelId, image.bytes, caption);
+    const finalBytes = await applyWatermark(env, cfg, image.bytes);
+    await sendPhoto(env, cfg.channelId, finalBytes, caption);
   }
   return true;
 }

@@ -2,7 +2,7 @@ import { loadDailyUsage, saveDailyUsage } from './budget';
 import { buildCaption, buildMessage, makeCaption } from './caption';
 import { countPosted } from './dedup';
 import { fetchAllFeeds } from './feeds';
-import { fetchOgImage, generateImage, makeImagePrompt } from './image';
+import { applyWatermark, fetchOgImage, generateImage, makeImagePrompt } from './image';
 import {
   getChat,
   getChatMember,
@@ -68,9 +68,9 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
     try {
       const prompt = await makeImagePrompt(env, cfg, item);
       spent += cfg.est.imagePrompt;
-      photo = await generateImage(env, cfg, prompt);
+      photo = await generateImage(env, cfg, cfg.imageModel, prompt);
       spent += cfg.est.image;
-      steps.push('Image-модель (генерация картинки): OK');
+      steps.push(`Image-модель (${cfg.imageModel}): OK`);
     } catch (e) {
       steps.push('⚠️ Генерация картинки не удалась: ' + String(e));
       const og = await fetchOgImage(item.link);
@@ -80,9 +80,15 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
       }
     }
 
-    // --- 4. Отправка тестового поста админу в личку ---
+    // --- 4. Вотермарка + отправка тестового поста админу в личку ---
     if (photo) {
-      await sendPhoto(env, admin, photo, buildCaption(captionBody, item.link, cfg));
+      if (typeof photo === 'string') {
+        await sendPhoto(env, admin, photo, buildCaption(captionBody, item.link, cfg));
+      } else {
+        const watermarked = await applyWatermark(env, cfg, photo);
+        steps.push(cfg.watermarkEnabled ? 'Вотермарка @monkeydiary: наложена' : 'Вотермарка: выключена');
+        await sendPhoto(env, admin, watermarked, buildCaption(captionBody, item.link, cfg));
+      }
     } else {
       await sendMessage(env, admin, buildMessage(captionBody, item.link, cfg));
     }

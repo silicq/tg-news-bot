@@ -5,6 +5,9 @@ export interface Env {
   // Bindings
   DB: D1Database;
   AI: Ai;
+  // Cloudflare Images binding (optional). Used to overlay the watermark
+  // off-Worker (the Free plan's 10ms CPU budget can't do pixel compositing).
+  IMAGES?: unknown;
 
   // Secrets
   TELEGRAM_BOT_TOKEN: string;
@@ -20,6 +23,8 @@ export interface Env {
   CAPTION_LANG?: string;
   CAPTION_TONE?: string;
   SOURCE_LABEL?: string;
+  CREDIT_TEXT?: string;
+  CREDIT_URL?: string;
   MAX_AGE_HOURS?: string;
   MAX_POSTS_PER_RUN?: string;
   MAX_POSTS_PER_DAY?: string;
@@ -30,11 +35,19 @@ export interface Env {
   DAILY_NEURON_BUDGET?: string;
   TEXT_MODEL?: string;
   IMAGE_MODEL?: string;
+  IMAGE_MODEL_FALLBACK?: string;
   IMAGE_STEPS?: string;
+  IMAGE_STEPS_FALLBACK?: string;
+  IMAGE_WIDTH?: string;
+  IMAGE_HEIGHT?: string;
+  WATERMARK_ENABLED?: string;
+  WATERMARK_OPACITY?: string;
+  WATERMARK_PADDING?: string;
   EST_NEURONS_RANK?: string;
   EST_NEURONS_CAPTION?: string;
   EST_NEURONS_IMAGE_PROMPT?: string;
   EST_NEURONS_IMAGE?: string;
+  EST_NEURONS_IMAGE_FALLBACK?: string;
   HISTORY_RETENTION_DAYS?: string;
 }
 
@@ -49,6 +62,8 @@ export interface Config {
   captionLang: string;
   captionTone: string;
   sourceLabel: string;
+  creditText: string;
+  creditUrl: string;
   maxAgeHours: number;
   maxPostsPerRun: number;
   maxPostsPerDay: number;
@@ -59,13 +74,21 @@ export interface Config {
   dailyNeuronBudget: number;
   textModel: string;
   imageModel: string;
+  imageModelFallback: string;
   imageSteps: number;
+  imageStepsFallback: number;
+  imageWidth: number;
+  imageHeight: number;
+  watermarkEnabled: boolean;
+  watermarkOpacity: number;
+  watermarkPadding: number;
   historyRetentionDays: number;
   est: {
     rank: number;
     caption: number;
     imagePrompt: number;
     image: number;
+    imageFallback: number;
   };
 }
 

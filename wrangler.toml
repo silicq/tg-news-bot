@@ -12,6 +12,11 @@ crons = ["0 */3 * * *"]
 [ai]
 binding = "AI"
 
+# Cloudflare Images binding -> env.IMAGES (used to overlay the watermark off-Worker).
+# Free plan includes 5000 transformations/month; our usage is a handful per day.
+[images]
+binding = "IMAGES"
+
 # D1 (SQLite) binding -> env.DB
 # Create the DB once with:  wrangler d1 create news_bot
 # then paste the printed database_id below.
@@ -45,12 +50,17 @@ CAPTION_TONE = "живой, тёплый, с лёгкой интригой, бе
 # Label shown on the source link at the end of each caption.
 SOURCE_LABEL = "Источник"
 
+# Channel credit added to every caption as a clickable link.
+CREDIT_TEXT = "@monkeydiary"
+CREDIT_URL = "https://t.me/monkeydiary"
+
 # Only consider feed entries newer than this many hours.
 MAX_AGE_HOURS = "24"
 
-# Posting caps.
+# Posting caps. Budget is plentiful (~50-60 neurons/post), so this is well
+# within the free tier — tune to taste.
 MAX_POSTS_PER_RUN = "2"
-MAX_POSTS_PER_DAY = "4"
+MAX_POSTS_PER_DAY = "8"
 
 # Minimum AI relevance score (0-100) required to publish.
 MIN_SCORE = "55"
@@ -79,10 +89,31 @@ DAILY_NEURON_BUDGET = "9000"
 # Text model: cheap + fast. Swap to @cf/meta/llama-3.3-70b-instruct-fp8-fast
 # for higher-quality ranking if your budget allows.
 TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
-# Image model: flux-1-schnell is the cheapest fast option (returns base64).
-IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
+# Primary image model: flux-1-schnell — best "AI look", cheap neurons.
+# NOTE: flux-1-schnell ALWAYS returns a square image (it has no width/height
+# parameter). IMAGE_WIDTH/HEIGHT below apply only to the fallback/SDXL models.
+IMAGE_MODEL = "@cf/bytedance/stable-diffusion-xl-lightning"
 # Diffusion steps for flux-1-schnell (default 4, max 8). Fewer = cheaper.
 IMAGE_STEPS = "4"
+
+# Free fallback image model. Used when the neuron budget is low or the primary
+# model fails — keeps the AI-generated look (instead of jumping to og:image).
+# This SDXL model honours width/height, so the fallback comes out 16:9.
+# Other free options: @cf/stabilityai/stable-diffusion-xl-base-1.0,
+# @cf/lykon/dreamshaper-8-lcm, @cf/runwayml/stable-diffusion-v1-5-img2img.
+IMAGE_MODEL_FALLBACK = "@cf/bytedance/stable-diffusion-xl-lightning"
+IMAGE_STEPS_FALLBACK = "8"
+
+# Target size for models that accept width/height (the SDXL family). 1280x720 = 16:9.
+# Want 16:9 on EVERY post? Set IMAGE_MODEL to an SDXL model (flux can't do it).
+IMAGE_WIDTH = "1280"
+IMAGE_HEIGHT = "720"
+
+# Watermark (overlaid off-Worker via the Images binding). Text/font are baked
+# into src/watermark-asset.ts — re-run scripts/make-watermark.mjs to change them.
+WATERMARK_ENABLED = "true"
+WATERMARK_OPACITY = "0.55"
+WATERMARK_PADDING = "28"
 
 # --- Estimated neuron cost per AI operation (the AI binding does NOT report
 # --- real usage, so the budget guard works off these deliberately-generous
@@ -91,6 +122,8 @@ EST_NEURONS_RANK = "60"
 EST_NEURONS_CAPTION = "30"
 EST_NEURONS_IMAGE_PROMPT = "15"
 EST_NEURONS_IMAGE = "150"
+# Fallback SDXL models are free in neurons.
+EST_NEURONS_IMAGE_FALLBACK = "0"
 
 # Delete posted-history rows older than this many days (keeps D1 small).
 HISTORY_RETENTION_DAYS = "30"

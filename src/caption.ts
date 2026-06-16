@@ -57,10 +57,19 @@ export async function makeCaption(env: Env, cfg: Config, item: FeedItem): Promis
  * included), which is stricter than Telegram's count — safe on the short side.
  */
 export function buildCaption(body: string, link: string, cfg: Config): string {
-  const sourceLine = `\n\n🔗 <a href="${escapeHtml(link)}">${escapeHtml(cfg.sourceLabel)}</a>`;
-  const room = TELEGRAM_CAPTION_LIMIT - sourceLine.length;
+  const footer = buildFooter(link, cfg);
+  const room = TELEGRAM_CAPTION_LIMIT - footer.length;
   const safeBody = truncate(escapeHtml(body), Math.max(0, room));
-  return safeBody + sourceLine;
+  return safeBody + footer;
+}
+
+/** Footer: clickable source link + the channel credit (@monkeydiary). */
+function buildFooter(link: string, cfg: Config): string {
+  const source = `🔗 <a href="${escapeHtml(link)}">${escapeHtml(cfg.sourceLabel)}</a>`;
+  const credit = cfg.creditText
+    ? ` · <a href="${escapeHtml(cfg.creditUrl)}">${escapeHtml(cfg.creditText)}</a>`
+    : '';
+  return `\n\n${source}${credit}`;
 }
 
 /** Plain-text-with-link message body for the no-photo fallback (sendMessage). */
