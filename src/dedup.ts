@@ -59,3 +59,9 @@ export async function cleanupHistory(db: D1Database, cfg: Config): Promise<void>
   const cutoff = Date.now() - cfg.historyRetentionDays * 86_400_000;
   await db.prepare('DELETE FROM posted WHERE posted_at < ?').bind(cutoff).run();
 }
+
+/** Total number of rows in the posted-history table. */
+export async function countPosted(db: D1Database): Promise<number> {
+  const row = await db.prepare('SELECT COUNT(*) AS c FROM posted').first<{ c: number }>();
+  return row?.c ?? 0;
+}

@@ -22,8 +22,11 @@ database_id = "fe58b4ce-afc7-41d3-8459-58f4691d9c37"
 migrations_dir = "migrations"
 
 # -----------------------------------------------------------------------------
-# Non-secret configuration. Secrets (TELEGRAM_BOT_TOKEN, MANUAL_TRIGGER_TOKEN)
-# are NOT here — set them in the dashboard or via `wrangler secret put`.
+# Non-secret configuration. Secrets are NOT here — set them in the dashboard or
+# via `wrangler secret put`:
+#   TELEGRAM_BOT_TOKEN    — bot token from @BotFather
+#   ADMIN_ID              — your Telegram user id (only admin can run commands)
+#   MANUAL_TRIGGER_TOKEN  — protects GET /run & /setup, also the webhook secret
 # -----------------------------------------------------------------------------
 [vars]
 # Channel id (@username) or numeric id. The bot must be an admin of the channel.

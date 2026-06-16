@@ -9,6 +9,9 @@ export interface Env {
   // Secrets
   TELEGRAM_BOT_TOKEN: string;
   MANUAL_TRIGGER_TOKEN?: string;
+  // Telegram user id of the admin. Only this user may run bot commands
+  // (/test, /stats, ...). Also the chat the bot replies to.
+  ADMIN_ID?: string;
 
   // Vars (all strings — parsed in config.ts)
   TELEGRAM_CHANNEL_ID: string;
@@ -88,3 +91,15 @@ export type ImageOutcome =
   | { kind: 'bytes'; bytes: Uint8Array }
   | { kind: 'url'; url: string }
   | { kind: 'none' };
+
+// --- Minimal Telegram webhook update shape (only the fields we read). ---
+export interface TelegramUpdate {
+  message?: TelegramMessage;
+  edited_message?: TelegramMessage;
+}
+
+export interface TelegramMessage {
+  text?: string;
+  chat?: { id: number; type?: string };
+  from?: { id: number; is_bot?: boolean; first_name?: string };
+}

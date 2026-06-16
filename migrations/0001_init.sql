@@ -14,10 +14,13 @@ CREATE TABLE IF NOT EXISTS posted (
 
 CREATE INDEX IF NOT EXISTS idx_posted_at ON posted (posted_at);
 
--- Daily neuron spend + post counter. One row per UTC day ('YYYY-MM-DD').
+-- Daily neuron spend + post/skip counters. One row per UTC day ('YYYY-MM-DD').
 -- Resets implicitly at 00:00 UTC because a new day = a new row.
+-- NOTE: the worker also self-ensures this schema on startup (see src/schema.ts),
+-- so applying this migration manually is optional.
 CREATE TABLE IF NOT EXISTS budget (
-  day          TEXT PRIMARY KEY,
-  neurons_used INTEGER NOT NULL DEFAULT 0,
-  posts_count  INTEGER NOT NULL DEFAULT 0
+  day           TEXT PRIMARY KEY,
+  neurons_used  INTEGER NOT NULL DEFAULT 0,
+  posts_count   INTEGER NOT NULL DEFAULT 0,
+  skipped_count INTEGER NOT NULL DEFAULT 0
 );

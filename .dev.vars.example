@@ -4,9 +4,15 @@
 # `wrangler secret put <NAME>`.
 
 # --- SECRETS (never commit real values) ---
+
 # Telegram bot token from @BotFather
 TELEGRAM_BOT_TOKEN="123456:ABC-DEF_your_bot_token_here"
 
-# Optional: token that protects the manual HTTP trigger (GET /run?token=...).
-# Leave empty to disable the manual trigger entirely.
+# Telegram numeric user id of the admin. Only this user can run bot commands
+# (/test, /stats, /run). Find it via @userinfobot.
+ADMIN_ID="123456789"
+
+# Token that protects the manual HTTP trigger (GET /run, GET /setup) AND is used
+# as the Telegram webhook secret_token. Use only [A-Za-z0-9_-], 1-256 chars.
+# Leave empty to disable the manual trigger and skip webhook header validation.
 MANUAL_TRIGGER_TOKEN="some-long-random-string"

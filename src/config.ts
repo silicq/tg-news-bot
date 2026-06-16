@@ -1,13 +1,16 @@
 import type { Config, Env, ImageMode, NoImageBehavior } from './types';
 import { logErr } from './util';
 
-function num(v: string | undefined, fallback: number): number {
-  const n = v === undefined ? NaN : Number(v);
+function num(v: unknown, fallback: number): number {
+  if (v === undefined || v === null || v === '') return fallback;
+  const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function str(v: string | undefined, fallback: string): string {
-  const s = (v ?? '').trim();
+function str(v: unknown, fallback: string): string {
+  // TOML vars can arrive as numbers/booleans (e.g. an unquoted channel id),
+  // so coerce defensively instead of assuming a string.
+  const s = v === undefined || v === null ? '' : String(v).trim();
   return s.length ? s : fallback;
 }
 

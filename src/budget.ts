@@ -4,15 +4,20 @@ import { utcDay } from './util';
 export interface DailyUsage {
   neurons: number;
   posts: number;
+  skipped: number;
 }
 
-/** Read today's neuron spend + post count from D1. */
+/** Read today's neuron spend, post count and skipped count from D1. */
 export async function loadDailyUsage(db: D1Database, day: string): Promise<DailyUsage> {
   const row = await db
-    .prepare('SELECT neurons_used, posts_count FROM budget WHERE day = ?')
+    .prepare('SELECT neurons_used, posts_count, skipped_count FROM budget WHERE day = ?')
     .bind(day)
-    .first<{ neurons_used: number; posts_count: number }>();
-  return { neurons: row?.neurons_used ?? 0, posts: row?.posts_count ?? 0 };
+    .first<{ neurons_used: number; posts_count: number; skipped_count: number }>();
+  return {
+    neurons: row?.neurons_used ?? 0,
+    posts: row?.posts_count ?? 0,
+    skipped: row?.skipped_count ?? 0,
+  };
 }
 
 /** Increment today's counters (UPSERT). */
@@ -21,22 +26,24 @@ export async function saveDailyUsage(
   day: string,
   neuronsDelta: number,
   postsDelta: number,
+  skippedDelta = 0,
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO budget (day, neurons_used, posts_count)
-       VALUES (?, ?, ?)
+      `INSERT INTO budget (day, neurons_used, posts_count, skipped_count)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT(day) DO UPDATE SET
-         neurons_used = neurons_used + excluded.neurons_used,
-         posts_count  = posts_count  + excluded.posts_count`,
+         neurons_used  = neurons_used  + excluded.neurons_used,
+         posts_count   = posts_count   + excluded.posts_count,
+         skipped_count = skipped_count + excluded.skipped_count`,
     )
-    .bind(day, Math.round(neuronsDelta), Math.round(postsDelta))
+    .bind(day, Math.round(neuronsDelta), Math.round(postsDelta), Math.round(skippedDelta))
     .run();
 }
 
 /**
- * Tracks neuron spend and post count for the current run, guards against
- * exceeding the daily budget, and flushes deltas to D1.
+ * Tracks neuron spend, post count and skipped count for the current run,
+ * guards against exceeding the daily budget, and flushes deltas to D1.
  *
  * NOTE: Workers AI does not report real neuron usage in the binding response,
  * so every `spend()` uses a deliberately-generous estimate (see config.est.*).
@@ -46,8 +53,10 @@ export async function saveDailyUsage(
 export class BudgetTracker {
   spentThisRun = 0;
   postsThisRun = 0;
+  skippedThisRun = 0;
   private savedNeurons = 0;
   private savedPosts = 0;
+  private savedSkipped = 0;
 
   constructor(
     private readonly db: D1Database,
@@ -57,22 +66,18 @@ export class BudgetTracker {
     private readonly cfg: Config,
   ) {}
 
-  /** Neurons left in today's budget. */
   remaining(): number {
     return this.cfg.dailyNeuronBudget - (this.startNeurons + this.spentThisRun);
   }
 
-  /** Would spending `n` more neurons stay within budget? */
   canAfford(n: number): boolean {
     return this.startNeurons + this.spentThisRun + n <= this.cfg.dailyNeuronBudget;
   }
 
-  /** True when remaining budget is below the og-fallback threshold. */
   isLow(): boolean {
     return this.remaining() < this.cfg.ogFallbackThreshold;
   }
 
-  /** Total posts published today (persisted + this run). */
   totalPosts(): number {
     return this.startPosts + this.postsThisRun;
   }
@@ -85,14 +90,20 @@ export class BudgetTracker {
     this.postsThisRun += 1;
   }
 
+  countSkipped(n = 1): void {
+    if (n > 0) this.skippedThisRun += n;
+  }
+
   /** Persist any not-yet-saved deltas to D1. Safe to call repeatedly. */
   async flush(): Promise<void> {
     const dN = this.spentThisRun - this.savedNeurons;
     const dP = this.postsThisRun - this.savedPosts;
-    if (dN === 0 && dP === 0) return;
-    await saveDailyUsage(this.db, this.day, dN, dP);
+    const dS = this.skippedThisRun - this.savedSkipped;
+    if (dN === 0 && dP === 0 && dS === 0) return;
+    await saveDailyUsage(this.db, this.day, dN, dP, dS);
     this.savedNeurons = this.spentThisRun;
     this.savedPosts = this.postsThisRun;
+    this.savedSkipped = this.skippedThisRun;
   }
 }
 
