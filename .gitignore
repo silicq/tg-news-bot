@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Wrangler / Cloudflare local state
+.wrangler/
+.mf/
+dist/
+
+# Local secrets — NEVER commit these
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.local
+
+# Logs / misc
+*.log
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,93 @@
+name = "tg-news-bot"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+# How often the bot runs. Default: every 3 hours = 8 runs/day.
+# Suggested alternatives: "0 */4 * * *" (6/day) or "0 6,12,18 * * *" (3/day).
+# Keep this in mind for the neuron budget — see README.
+[triggers]
+crons = ["0 */3 * * *"]
+
+# Workers AI binding -> env.AI
+[ai]
+binding = "AI"
+
+# D1 (SQLite) binding -> env.DB
+# Create the DB once with:  wrangler d1 create news_bot
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "news_bot"
+database_id = "fe58b4ce-afc7-41d3-8459-58f4691d9c37"
+migrations_dir = "migrations"
+
+# -----------------------------------------------------------------------------
+# Non-secret configuration. Secrets (TELEGRAM_BOT_TOKEN, MANUAL_TRIGGER_TOKEN)
+# are NOT here — set them in the dashboard or via `wrangler secret put`.
+# -----------------------------------------------------------------------------
+[vars]
+# Channel id (@username) or numeric id. The bot must be an admin of the channel.
+TELEGRAM_CHANNEL_ID = -1003770441052
+
+# RSS/Atom sources as a JSON array (single-quoted TOML literal, no escaping needed).
+RSS_FEEDS = '["https://www.sciencedaily.com/rss/top/science.xml","https://www.nasa.gov/feed/","https://www.goodnewsnetwork.org/feed/","https://www.positive.news/feed/","https://www.smithsonianmag.com/rss/latest_articles/","https://www.atlasobscura.com/feeds/latest"]'
+
+# Audience / topic description used to rank news. Keep it specific.
+CHANNEL_THEME = "Позитивный канал для поднятия настроения. Темы: животные, юмор и смешное, наука, космос, дизайн, удивительные факты о мире. Отбирай добрые, любопытные, вдохновляющие новости. Исключай негатив, политику, трагедии, насилие, тяжёлые темы."
+
+# Caption language code and tone.
+CAPTION_LANG = "ru"
+CAPTION_TONE = "живой, тёплый, с лёгкой интригой, без кликбейта-обмана"
+
+# Label shown on the source link at the end of each caption.
+SOURCE_LABEL = "Источник"
+
+# Only consider feed entries newer than this many hours.
+MAX_AGE_HOURS = "24"
+
+# Posting caps.
+MAX_POSTS_PER_RUN = "2"
+MAX_POSTS_PER_DAY = "4"
+
+# Minimum AI relevance score (0-100) required to publish.
+MIN_SCORE = "55"
+
+# Image strategy:
+#   "generate" (default) — generate with Workers AI, fall back to og:image
+#                          when the neuron budget is low or generation fails.
+#   "og_first"          — try the article's og:image first (free in neurons),
+#                          generate only when no og:image exists. Stretches the
+#                          free tier and allows many more posts.
+IMAGE_MODE = "generate"
+
+# When remaining neurons drop below this, skip generation and use og:image.
+OG_FALLBACK_NEURON_THRESHOLD = "2000"
+
+# What to do when there is no image at all (no generated image AND no og:image):
+#   "og"   (default) — post anyway as a text message (image was preferred but optional)
+#   "text"           — post as a text message
+#   "skip"           — skip the post
+NO_IMAGE_BEHAVIOR = "og"
+
+# Daily neuron safety budget. The free tier is 10000/day; we stay under it.
+DAILY_NEURON_BUDGET = "9000"
+
+# Workers AI model IDs (verified against Cloudflare docs, June 2026).
+# Text model: cheap + fast. Swap to @cf/meta/llama-3.3-70b-instruct-fp8-fast
+# for higher-quality ranking if your budget allows.
+TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
+# Image model: flux-1-schnell is the cheapest fast option (returns base64).
+IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
+# Diffusion steps for flux-1-schnell (default 4, max 8). Fewer = cheaper.
+IMAGE_STEPS = "4"
+
+# --- Estimated neuron cost per AI operation (the AI binding does NOT report
+# --- real usage, so the budget guard works off these deliberately-generous
+# --- estimates). See README for the math. ---
+EST_NEURONS_RANK = "60"
+EST_NEURONS_CAPTION = "30"
+EST_NEURONS_IMAGE_PROMPT = "15"
+EST_NEURONS_IMAGE = "150"
+
+# Delete posted-history rows older than this many days (keeps D1 small).
+HISTORY_RETENTION_DAYS = "30"

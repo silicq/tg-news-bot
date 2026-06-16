@@ -1,0 +1,12 @@
+# Copy this file to `.dev.vars` for local development (`wrangler dev`).
+# `.dev.vars` is git-ignored. In production these go into the Cloudflare
+# dashboard (Workers > Settings > Variables and Secrets) or via
+# `wrangler secret put <NAME>`.
+
+# --- SECRETS (never commit real values) ---
+# Telegram bot token from @BotFather
+TELEGRAM_BOT_TOKEN="123456:ABC-DEF_your_bot_token_here"
+
+# Optional: token that protects the manual HTTP trigger (GET /run?token=...).
+# Leave empty to disable the manual trigger entirely.
+MANUAL_TRIGGER_TOKEN="some-long-random-string"
