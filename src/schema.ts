@@ -23,6 +23,12 @@ export async function ensureSchema(db: D1Database): Promise<void> {
          posts_count  INTEGER NOT NULL DEFAULT 0
        )`,
     ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS state (
+         key   TEXT PRIMARY KEY,
+         value TEXT
+       )`,
+    ),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_posted_at ON posted (posted_at)`),
   ]);
 

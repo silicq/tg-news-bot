@@ -65,6 +65,26 @@ MAX_POSTS_PER_DAY = "8"
 # Minimum AI relevance score (0-100) required to publish.
 MIN_SCORE = "55"
 
+# Topic dedup: drop the same story when it appears across multiple feeds, and
+# skip headlines too similar to recently posted ones. SIMILARITY_THRESHOLD is
+# the overlap cutoff over title words (0-1): higher = stricter (fewer merges).
+TOPIC_DEDUP = "true"
+SIMILARITY_THRESHOLD = "0.5"
+
+# Quiet hours: no posting when start <= local hour < end, in the audience
+# timezone (TZ_OFFSET_HOURS from UTC). Default: no posts 00:00-08:00 MSK.
+# Set QUIET_START_HOUR == QUIET_END_HOUR to disable.
+QUIET_START_HOUR = "0"
+QUIET_END_HOUR = "8"
+TZ_OFFSET_HOURS = "3"
+
+# Health alerting: DM the admin (ADMIN_ID) when a run crashes, every post fails,
+# or RSS returns nothing for HEALTH_EMPTY_STREAK runs in a row. Re-alerts at most
+# once per HEALTH_COOLDOWN_HOURS, and sends a "recovered" notice afterwards.
+HEALTH_ALERTS = "true"
+HEALTH_EMPTY_STREAK = "3"
+HEALTH_COOLDOWN_HOURS = "6"
+
 # Image strategy:
 #   "generate" (default) — generate with Workers AI, fall back to og:image
 #                          when the neuron budget is low or generation fails.

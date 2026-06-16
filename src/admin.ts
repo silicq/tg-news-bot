@@ -3,6 +3,7 @@ import { buildCaption, buildMessage, makeCaption } from './caption';
 import { countPosted } from './dedup';
 import { fetchAllFeeds } from './feeds';
 import { applyWatermark, fetchOgImage, generateImage, makeImagePrompt } from './image';
+import { isQuietHours, localHour } from './schedule';
 import {
   getChat,
   getChatMember,
@@ -152,8 +153,17 @@ export async function handleStats(env: Env, cfg: Config): Promise<void> {
     `   внутренний бюджет: ${usage.neurons} / ${cfg.dailyNeuronBudget}, осталось ~${budgetLeft}`,
     '',
     `⚙️ Режим картинок: <code>${cfg.imageMode}</code>, постов за запуск: ${cfg.maxPostsPerRun}`,
+    quietLine(cfg),
     `<i>Счётчик нейронов — оценка (биндинг Workers AI не возвращает реальный расход). Сброс в 00:00 UTC.</i>`,
   ];
 
   await sendMessage(env, admin, lines.join('\n'));
+}
+
+function quietLine(cfg: Config): string {
+  if (cfg.quietStartHour === cfg.quietEndHour) return '🕐 Тихие часы: выключены';
+  const now = isQuietHours(cfg)
+    ? `сейчас тихо (${localHour(cfg)}:00)`
+    : `сейчас активно (${localHour(cfg)}:00)`;
+  return `🕐 Тихие часы: ${cfg.quietStartHour}:00–${cfg.quietEndHour}:00 (UTC${cfg.tzOffsetHours >= 0 ? '+' : ''}${cfg.tzOffsetHours}), ${now}`;
 }

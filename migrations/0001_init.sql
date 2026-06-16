@@ -24,3 +24,9 @@ CREATE TABLE IF NOT EXISTS budget (
   posts_count   INTEGER NOT NULL DEFAULT 0,
   skipped_count INTEGER NOT NULL DEFAULT 0
 );
+
+-- Generic key-value store for cross-run bot state (health counters, etc.).
+CREATE TABLE IF NOT EXISTS state (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);

@@ -65,3 +65,12 @@ export async function countPosted(db: D1Database): Promise<number> {
   const row = await db.prepare('SELECT COUNT(*) AS c FROM posted').first<{ c: number }>();
   return row?.c ?? 0;
 }
+
+/** Titles of the most recently posted items (for topic-level dedup). */
+export async function recentPostedTitles(db: D1Database, limit = 120): Promise<string[]> {
+  const rows = await db
+    .prepare('SELECT title FROM posted ORDER BY posted_at DESC LIMIT ?')
+    .bind(limit)
+    .all<{ title: string }>();
+  return (rows.results ?? []).map((r) => r.title).filter((t): t is string => Boolean(t));
+}

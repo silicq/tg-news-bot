@@ -2,20 +2,30 @@ import { handleStats, handleTest, helpText } from './admin';
 import { BudgetTracker, createTracker } from './budget';
 import { buildCaption, buildMessage, makeCaption } from './caption';
 import { assertConfig, loadConfig } from './config';
-import { cleanupHistory, filterUnposted, recordPosted } from './dedup';
+import { cleanupHistory, filterUnposted, recordPosted, recentPostedTitles } from './dedup';
 import { fetchAllFeeds } from './feeds';
+import { runHealthCheck, type RunOutcome } from './health';
 import { acquireImage, applyWatermark } from './image';
 import { rankItems } from './ranking';
+import { isQuietHours } from './schedule';
 import { ensureSchema } from './schema';
+import { dedupeByTopic, dropSimilarToRecent } from './similarity';
 import { sendMessage, sendPhoto, setWebhook } from './telegram';
 import type { Config, Env, FeedItem, RankedItem, TelegramUpdate } from './types';
 import { log, logErr } from './util';
 
+interface RunOptions {
+  /** Skip the run during quiet hours (cron) vs. always run (manual trigger). */
+  respectQuietHours?: boolean;
+  /** Alert the admin on failure (cron) vs. let the caller report it (manual). */
+  healthAlerts?: boolean;
+}
+
 export default {
-  // Cron entry point.
+  // Cron entry point — respects quiet hours and alerts the admin on failure.
   async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     try {
-      await runOnce(env);
+      await runOnce(env, { respectQuietHours: true, healthAlerts: true });
     } catch (e) {
       logErr('run failed:', String(e));
     }
@@ -29,7 +39,7 @@ export default {
       return Response.json({ ok: true, service: 'tg-news-bot' });
     }
 
-    // Manual full-pipeline trigger for testing: GET /run?token=...
+    // Manual full-pipeline trigger for testing (bypasses quiet hours): GET /run?token=...
     if (url.pathname === '/run') {
       if (!authorized(env, url)) return forbidden(env);
       ctx.waitUntil(runOnce(env).catch((e) => logErr('manual run failed:', String(e))));
@@ -106,6 +116,7 @@ async function handleUpdate(env: Env, update: TelegramUpdate): Promise<void> {
         await handleStats(env, cfg);
         break;
       case '/run':
+        // Manual run bypasses quiet hours; failures are reported below.
         await sendMessage(env, env.ADMIN_ID, '▶️ Запускаю цикл публикации…');
         await runOnce(env);
         await sendMessage(env, env.ADMIN_ID, '✅ Готово. Загляни в /stats.');
@@ -123,8 +134,34 @@ async function handleUpdate(env: Env, update: TelegramUpdate): Promise<void> {
 }
 
 /** One full pipeline pass. Safe to call repeatedly (idempotent via dedup). */
-export async function runOnce(env: Env): Promise<void> {
+export async function runOnce(env: Env, opts: RunOptions = {}): Promise<void> {
   const cfg = loadConfig(env);
+
+  if (opts.respectQuietHours && isQuietHours(cfg)) {
+    log('quiet hours for the audience timezone — skipping this run');
+    return;
+  }
+
+  const outcome: RunOutcome = { fetched: 0, posted: 0, postAttempts: 0, postFailures: 0 };
+  let threw: unknown;
+
+  try {
+    await runPipeline(env, cfg, outcome);
+  } catch (e) {
+    outcome.error = String(e);
+    logErr('run failed:', String(e));
+    threw = e;
+  }
+
+  if (opts.healthAlerts) {
+    await runHealthCheck(env, cfg, outcome);
+  } else if (threw) {
+    throw threw; // let the manual caller report it
+  }
+}
+
+/** The actual pipeline; fills `outcome` for health reporting. */
+async function runPipeline(env: Env, cfg: Config, outcome: RunOutcome): Promise<void> {
   assertConfig(cfg, env);
   await ensureSchema(env.DB);
 
@@ -141,12 +178,25 @@ export async function runOnce(env: Env): Promise<void> {
 
   // 1. Fetch + 2. parse.
   const items = await fetchAllFeeds(cfg);
+  outcome.fetched = items.length;
   log(`fetched ${items.length} fresh items from ${cfg.feeds.length} feeds`);
   if (items.length === 0) return;
 
-  // 3. Dedup against history.
-  const unposted = await filterUnposted(env.DB, items);
-  log(`${unposted.length} items remain after dedup`);
+  // 3a. Hash dedup against history.
+  let unposted = await filterUnposted(env.DB, items);
+  log(`${unposted.length} items remain after hash dedup`);
+
+  // 3b. Topic dedup: collapse near-duplicate stories across feeds and drop any
+  // that match a recently posted headline (free — no neurons).
+  if (cfg.topicDedup && unposted.length > 0) {
+    const before = unposted.length;
+    unposted = dedupeByTopic(unposted, cfg.similarityThreshold);
+    const recent = await recentPostedTitles(env.DB);
+    unposted = dropSimilarToRecent(unposted, recent, cfg.similarityThreshold);
+    if (unposted.length !== before) {
+      log(`${before - unposted.length} near-duplicate items dropped (topic dedup)`);
+    }
+  }
   if (unposted.length === 0) return;
 
   // 4. Rank (single batched AI call) — only if we can afford it.
@@ -176,9 +226,8 @@ export async function runOnce(env: Env): Promise<void> {
   }
 
   // 6. Publish top items.
-  let published = 0;
   for (const { item, score, reason } of passing) {
-    if (published >= slots) break;
+    if (outcome.posted >= slots) break;
     if (tracker.totalPosts() >= cfg.maxPostsPerDay) break;
 
     try {
@@ -186,13 +235,16 @@ export async function runOnce(env: Env): Promise<void> {
       if (posted) {
         await recordPosted(env.DB, item);
         tracker.countPost();
-        published += 1;
+        outcome.posted += 1;
+        outcome.postAttempts += 1;
         log(`posted (score ${score}): ${item.title} — ${reason}`);
       } else {
-        // Skipped on purpose (NO_IMAGE_BEHAVIOR=skip).
+        // Skipped on purpose (NO_IMAGE_BEHAVIOR=skip) — not a failure.
         tracker.countSkipped(1);
       }
     } catch (e) {
+      outcome.postAttempts += 1;
+      outcome.postFailures += 1;
       logErr('failed to publish item:', item.link, String(e));
     } finally {
       await tracker.flush();
@@ -206,7 +258,7 @@ export async function runOnce(env: Env): Promise<void> {
   } catch (e) {
     logErr('history cleanup failed:', String(e));
   }
-  log(`run done — published ${published}, neurons used today: ${cfg.dailyNeuronBudget - tracker.remaining()}`);
+  log(`run done — published ${outcome.posted}, neurons used today: ${cfg.dailyNeuronBudget - tracker.remaining()}`);
 }
 
 /**
