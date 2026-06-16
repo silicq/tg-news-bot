@@ -92,7 +92,7 @@ TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 # Primary image model: flux-1-schnell — best "AI look", cheap neurons.
 # NOTE: flux-1-schnell ALWAYS returns a square image (it has no width/height
 # parameter). IMAGE_WIDTH/HEIGHT below apply only to the fallback/SDXL models.
-IMAGE_MODEL = "@cf/bytedance/stable-diffusion-xl-lightning"
+IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 # Diffusion steps for flux-1-schnell (default 4, max 8). Fewer = cheaper.
 IMAGE_STEPS = "4"
 
