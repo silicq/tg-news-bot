@@ -42,6 +42,7 @@ export interface Env {
   NO_IMAGE_BEHAVIOR?: string;
   DAILY_NEURON_BUDGET?: string;
   TEXT_MODEL?: string;
+  TRANSLATE_MODEL?: string;
   IMAGE_MODEL?: string;
   IMAGE_MODEL_FALLBACK?: string;
   IMAGE_STEPS?: string;
@@ -51,11 +52,17 @@ export interface Env {
   WATERMARK_ENABLED?: string;
   WATERMARK_OPACITY?: string;
   WATERMARK_PADDING?: string;
+  TELEGRAPH_ENABLED?: string;
+  TELEGRAPH_AUTHOR_NAME?: string;
+  TELEGRAPH_AUTHOR_URL?: string;
+  ARTICLE_MAX_BLOCKS?: string;
+  ARTICLE_READ_LABEL?: string;
   EST_NEURONS_RANK?: string;
   EST_NEURONS_CAPTION?: string;
   EST_NEURONS_IMAGE_PROMPT?: string;
   EST_NEURONS_IMAGE?: string;
   EST_NEURONS_IMAGE_FALLBACK?: string;
+  EST_NEURONS_TRANSLATE?: string;
   HISTORY_RETENTION_DAYS?: string;
 }
 
@@ -89,6 +96,7 @@ export interface Config {
   noImageBehavior: NoImageBehavior;
   dailyNeuronBudget: number;
   textModel: string;
+  translateModel: string;
   imageModel: string;
   imageModelFallback: string;
   imageSteps: number;
@@ -98,6 +106,11 @@ export interface Config {
   watermarkEnabled: boolean;
   watermarkOpacity: number;
   watermarkPadding: number;
+  telegraphEnabled: boolean;
+  telegraphAuthorName: string;
+  telegraphAuthorUrl: string;
+  articleMaxBlocks: number;
+  articleReadLabel: string;
   historyRetentionDays: number;
   est: {
     rank: number;
@@ -105,6 +118,7 @@ export interface Config {
     imagePrompt: number;
     image: number;
     imageFallback: number;
+    translate: number;
   };
 }
 

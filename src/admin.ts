@@ -1,9 +1,10 @@
-import { loadDailyUsage, saveDailyUsage } from './budget';
+import { createTracker, loadDailyUsage, saveDailyUsage } from './budget';
 import { buildCaption, buildMessage, makeCaption } from './caption';
 import { countPosted } from './dedup';
 import { fetchAllFeeds } from './feeds';
 import { applyWatermark, fetchOgImage, generateImage, makeImagePrompt } from './image';
 import { isQuietHours, localHour } from './schedule';
+import { publishTranslatedArticle } from './telegraph';
 import {
   getChat,
   getChatMember,
@@ -81,21 +82,30 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
       }
     }
 
-    // --- 4. Вотермарка + отправка тестового поста админу в личку ---
+    // --- 4. Telegraph-статья с переводом (если включено) ---
+    let articleUrl: string | null = null;
+    if (cfg.telegraphEnabled) {
+      const tracker = await createTracker(env.DB, cfg);
+      articleUrl = await publishTranslatedArticle(env, cfg, item, tracker);
+      spent += tracker.spentThisRun;
+      steps.push(articleUrl ? 'Telegraph-статья с переводом: ' + articleUrl : '⚠️ Статью собрать не удалось (мало текста/недоступна)');
+    }
+
+    // --- 5. Вотермарка + отправка тестового поста админу в личку ---
     if (photo) {
       if (typeof photo === 'string') {
-        await sendPhoto(env, admin, photo, buildCaption(captionBody, item.link, cfg));
+        await sendPhoto(env, admin, photo, buildCaption(captionBody, item.link, cfg, articleUrl));
       } else {
         const watermarked = await applyWatermark(env, cfg, photo);
         steps.push(cfg.watermarkEnabled ? 'Вотермарка @monkeydiary: наложена' : 'Вотермарка: выключена');
-        await sendPhoto(env, admin, watermarked, buildCaption(captionBody, item.link, cfg));
+        await sendPhoto(env, admin, watermarked, buildCaption(captionBody, item.link, cfg, articleUrl));
       }
     } else {
-      await sendMessage(env, admin, buildMessage(captionBody, item.link, cfg));
+      await sendMessage(env, admin, buildMessage(captionBody, item.link, cfg, articleUrl));
     }
     steps.push('Отправка тестового поста в личку: OK');
 
-    // --- 5. Проверка связи с каналом ---
+    // --- 6. Проверка связи с каналом ---
     try {
       const [chat, me] = await Promise.all([getChat(env, cfg.channelId), getMe(env)]);
       const member = await getChatMember(env, cfg.channelId, me.id);

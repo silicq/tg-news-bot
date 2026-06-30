@@ -56,24 +56,27 @@ export async function makeCaption(env: Env, cfg: Config, item: FeedItem): Promis
  * trimmed to Telegram's 1024-char limit. We measure the raw string (tags
  * included), which is stricter than Telegram's count — safe on the short side.
  */
-export function buildCaption(body: string, link: string, cfg: Config): string {
-  const footer = buildFooter(link, cfg);
+export function buildCaption(body: string, link: string, cfg: Config, articleUrl?: string | null): string {
+  const footer = buildFooter(link, cfg, articleUrl);
   const room = TELEGRAM_CAPTION_LIMIT - footer.length;
   const safeBody = truncate(escapeHtml(body), Math.max(0, room));
   return safeBody + footer;
 }
 
-/** Footer: clickable source link + the channel credit (@monkeydiary). */
-function buildFooter(link: string, cfg: Config): string {
-  const source = `🔗 <a href="${escapeHtml(link)}">${escapeHtml(cfg.sourceLabel)}</a>`;
-  const credit = cfg.creditText
-    ? ` · <a href="${escapeHtml(cfg.creditUrl)}">${escapeHtml(cfg.creditText)}</a>`
-    : '';
-  return `\n\n${source}${credit}`;
+/** Footer: source link + optional "read translation" link + channel credit. */
+function buildFooter(link: string, cfg: Config, articleUrl?: string | null): string {
+  const parts = [`🔗 <a href="${escapeHtml(link)}">${escapeHtml(cfg.sourceLabel)}</a>`];
+  if (articleUrl) {
+    parts.push(`<a href="${escapeHtml(articleUrl)}">${escapeHtml(cfg.articleReadLabel)}</a>`);
+  }
+  if (cfg.creditText) {
+    parts.push(`<a href="${escapeHtml(cfg.creditUrl)}">${escapeHtml(cfg.creditText)}</a>`);
+  }
+  return `\n\n${parts.join(' · ')}`;
 }
 
 /** Plain-text-with-link message body for the no-photo fallback (sendMessage). */
-export function buildMessage(body: string, link: string, cfg: Config): string {
+export function buildMessage(body: string, link: string, cfg: Config, articleUrl?: string | null): string {
   // sendMessage allows 4096 chars, so the same builder fits comfortably.
-  return buildCaption(body, link, cfg);
+  return buildCaption(body, link, cfg, articleUrl);
 }

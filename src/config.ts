@@ -49,7 +49,7 @@ export function loadConfig(env: Env): Config {
     creditUrl: str(env.CREDIT_URL, 'https://t.me/monkeydiary'),
     maxAgeHours: num(env.MAX_AGE_HOURS, 24),
     maxPostsPerRun: Math.max(0, num(env.MAX_POSTS_PER_RUN, 2)),
-    maxPostsPerDay: Math.max(0, num(env.MAX_POSTS_PER_DAY, 8)),
+    maxPostsPerDay: Math.max(0, num(env.MAX_POSTS_PER_DAY, 16)),
     minScore: num(env.MIN_SCORE, 55),
     topicDedup: bool(env.TOPIC_DEDUP, true),
     similarityThreshold: Math.min(1, Math.max(0, num(env.SIMILARITY_THRESHOLD, 0.5))),
@@ -66,6 +66,7 @@ export function loadConfig(env: Env): Config {
     noImageBehavior: ['og', 'text', 'skip'].includes(noImageBehavior) ? noImageBehavior : 'og',
     dailyNeuronBudget: num(env.DAILY_NEURON_BUDGET, 9000),
     textModel: str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast'),
+    translateModel: str(env.TRANSLATE_MODEL, str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast')),
     imageModel: str(env.IMAGE_MODEL, '@cf/black-forest-labs/flux-1-schnell'),
     // Free diffusion model used when the neuron budget is low or the primary
     // model fails. Keeps the AI-generated look (unlike og:image).
@@ -79,6 +80,12 @@ export function loadConfig(env: Env): Config {
     watermarkEnabled: bool(env.WATERMARK_ENABLED, true),
     watermarkOpacity: Math.min(1, Math.max(0, num(env.WATERMARK_OPACITY, 0.55))),
     watermarkPadding: Math.max(0, num(env.WATERMARK_PADDING, 28)),
+    // Telegra.ph article with an AI translation of the original.
+    telegraphEnabled: bool(env.TELEGRAPH_ENABLED, true),
+    telegraphAuthorName: str(env.TELEGRAPH_AUTHOR_NAME, str(env.CREDIT_TEXT, '@monkeydiary')),
+    telegraphAuthorUrl: str(env.TELEGRAPH_AUTHOR_URL, str(env.CREDIT_URL, 'https://t.me/monkeydiary')),
+    articleMaxBlocks: Math.max(3, num(env.ARTICLE_MAX_BLOCKS, 25)),
+    articleReadLabel: str(env.ARTICLE_READ_LABEL, '📖 Перевод'),
     historyRetentionDays: num(env.HISTORY_RETENTION_DAYS, 30),
     est: {
       rank: num(env.EST_NEURONS_RANK, 60),
@@ -86,6 +93,7 @@ export function loadConfig(env: Env): Config {
       imagePrompt: num(env.EST_NEURONS_IMAGE_PROMPT, 15),
       image: num(env.EST_NEURONS_IMAGE, 150),
       imageFallback: num(env.EST_NEURONS_IMAGE_FALLBACK, 0),
+      translate: num(env.EST_NEURONS_TRANSLATE, 250),
     },
   };
 }

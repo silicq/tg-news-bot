@@ -2,11 +2,11 @@ name = "tg-news-bot"
 main = "src/index.ts"
 compatibility_date = "2026-06-01"
 
-# How often the bot runs. Default: every 3 hours = 8 runs/day.
-# Suggested alternatives: "0 */4 * * *" (6/day) or "0 6,12,18 * * *" (3/day).
-# Keep this in mind for the neuron budget — see README.
+# How often the bot runs. Every 2 hours = 12 runs/day; quiet hours skip the
+# nighttime ones, leaving ~8 active runs. Actual posts/day ≈ active runs ×
+# MAX_POSTS_PER_RUN, capped by MAX_POSTS_PER_DAY.
 [triggers]
-crons = ["0 */3 * * *"]
+crons = ["0 */2 * * *"]
 
 # Workers AI binding -> env.AI
 [ai]
@@ -57,10 +57,10 @@ CREDIT_URL = "https://t.me/monkeydiary"
 # Only consider feed entries newer than this many hours.
 MAX_AGE_HOURS = "24"
 
-# Posting caps. Budget is plentiful (~50-60 neurons/post), so this is well
-# within the free tier — tune to taste.
+# Posting caps. Only ~2k of the 10k daily neurons get used, so there's lots of
+# headroom — raised the day cap. Actual posts ≈ active runs × MAX_POSTS_PER_RUN.
 MAX_POSTS_PER_RUN = "2"
-MAX_POSTS_PER_DAY = "8"
+MAX_POSTS_PER_DAY = "16"
 
 # Minimum AI relevance score (0-100) required to publish.
 MIN_SCORE = "55"
@@ -135,6 +135,18 @@ WATERMARK_ENABLED = "true"
 WATERMARK_OPACITY = "0.55"
 WATERMARK_PADDING = "28"
 
+# Telegra.ph article with a full AI translation of the original story. The post
+# caption gets a "📖 Перевод" link. The article includes the original images,
+# a source link, a note on how it was translated and an AI-error disclaimer.
+# The Telegraph account token is created automatically and stored in D1.
+TELEGRAPH_ENABLED = "true"
+TELEGRAPH_AUTHOR_NAME = "@monkeydiary"
+TELEGRAPH_AUTHOR_URL = "https://t.me/monkeydiary"
+ARTICLE_MAX_BLOCKS = "25"
+ARTICLE_READ_LABEL = "📖 Перевод"
+# Translation model (defaults to TEXT_MODEL). m2m100 etc. can be set here.
+# TRANSLATE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
+
 # --- Estimated neuron cost per AI operation (the AI binding does NOT report
 # --- real usage, so the budget guard works off these deliberately-generous
 # --- estimates). See README for the math. ---
@@ -144,6 +156,8 @@ EST_NEURONS_IMAGE_PROMPT = "15"
 EST_NEURONS_IMAGE = "150"
 # Fallback SDXL models are free in neurons.
 EST_NEURONS_IMAGE_FALLBACK = "0"
+# Full-article translation (several batched LLM calls). Generous estimate.
+EST_NEURONS_TRANSLATE = "250"
 
 # Delete posted-history rows older than this many days (keeps D1 small).
 HISTORY_RETENTION_DAYS = "30"

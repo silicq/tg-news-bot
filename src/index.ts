@@ -10,6 +10,7 @@ import { rankItems } from './ranking';
 import { isQuietHours } from './schedule';
 import { ensureSchema } from './schema';
 import { dedupeByTopic, dropSimilarToRecent } from './similarity';
+import { publishTranslatedArticle } from './telegraph';
 import { sendMessage, sendPhoto, setWebhook } from './telegram';
 import type { Config, Env, FeedItem, RankedItem, TelegramUpdate } from './types';
 import { log, logErr } from './util';
@@ -280,6 +281,13 @@ async function publishItem(
     captionBody = item.title;
   }
 
+  // Optional: a telegra.ph page with the full AI translation of the original.
+  let articleUrl: string | null = null;
+  if (cfg.telegraphEnabled && tracker.canAfford(cfg.est.translate)) {
+    articleUrl = await publishTranslatedArticle(env, cfg, item, tracker);
+    if (articleUrl) log('telegraph article:', articleUrl);
+  }
+
   const image = await acquireImage(env, cfg, item, tracker);
 
   if (image.kind === 'none') {
@@ -287,11 +295,11 @@ async function publishItem(
       log('no image available and NO_IMAGE_BEHAVIOR=skip; skipping:', item.link);
       return false;
     }
-    await sendMessage(env, cfg.channelId, buildMessage(captionBody, item.link, cfg));
+    await sendMessage(env, cfg.channelId, buildMessage(captionBody, item.link, cfg, articleUrl));
     return true;
   }
 
-  const caption = buildCaption(captionBody, item.link, cfg);
+  const caption = buildCaption(captionBody, item.link, cfg, articleUrl);
   if (image.kind === 'url') {
     // og:image is a remote URL (rare fallback) — sent as-is, not watermarked.
     await sendPhoto(env, cfg.channelId, image.url, caption);
