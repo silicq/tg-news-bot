@@ -86,6 +86,9 @@ export function loadConfig(env: Env): Config {
     telegraphAuthorUrl: str(env.TELEGRAPH_AUTHOR_URL, str(env.CREDIT_URL, 'https://t.me/monkeydiary')),
     articleMaxBlocks: Math.max(3, num(env.ARTICLE_MAX_BLOCKS, 25)),
     articleReadLabel: str(env.ARTICLE_READ_LABEL, '📖 Перевод'),
+    // Put the source/translation links as tappable inline buttons instead of
+    // links inside the caption text (cleaner look).
+    buttonsEnabled: bool(env.BUTTONS_ENABLED, true),
     historyRetentionDays: num(env.HISTORY_RETENTION_DAYS, 30),
     est: {
       rank: num(env.EST_NEURONS_RANK, 60),

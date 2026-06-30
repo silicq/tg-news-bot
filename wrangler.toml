@@ -144,6 +144,11 @@ TELEGRAPH_AUTHOR_NAME = "@monkeydiary"
 TELEGRAPH_AUTHOR_URL = "https://t.me/monkeydiary"
 ARTICLE_MAX_BLOCKS = "25"
 ARTICLE_READ_LABEL = "📖 Перевод"
+
+# Show source/translation links as tappable inline buttons under the post
+# (cleaner) instead of links inside the caption text. The @monkeydiary credit
+# stays on the image watermark, so it isn't duplicated as a button.
+BUTTONS_ENABLED = "true"
 # Translation model (defaults to TEXT_MODEL). m2m100 etc. can be set here.
 # TRANSLATE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 

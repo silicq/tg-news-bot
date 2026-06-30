@@ -1,6 +1,6 @@
 import { handleStats, handleTest, helpText } from './admin';
 import { BudgetTracker, createTracker } from './budget';
-import { buildCaption, buildMessage, makeCaption } from './caption';
+import { buildBody, buildButtons, buildCaption, buildMessage, makeCaption } from './caption';
 import { assertConfig, loadConfig } from './config';
 import { cleanupHistory, filterUnposted, recordPosted, recentPostedTitles } from './dedup';
 import { fetchAllFeeds } from './feeds';
@@ -288,6 +288,14 @@ async function publishItem(
     if (articleUrl) log('telegraph article:', articleUrl);
   }
 
+  // Links go in inline buttons (clean caption) or in the caption footer.
+  const markup = cfg.buttonsEnabled
+    ? { inline_keyboard: buildButtons(item.link, cfg, articleUrl) }
+    : undefined;
+  const caption = cfg.buttonsEnabled
+    ? buildBody(captionBody)
+    : buildCaption(captionBody, item.link, cfg, articleUrl);
+
   const image = await acquireImage(env, cfg, item, tracker);
 
   if (image.kind === 'none') {
@@ -295,17 +303,17 @@ async function publishItem(
       log('no image available and NO_IMAGE_BEHAVIOR=skip; skipping:', item.link);
       return false;
     }
-    await sendMessage(env, cfg.channelId, buildMessage(captionBody, item.link, cfg, articleUrl));
+    const text = cfg.buttonsEnabled ? buildBody(captionBody) : buildMessage(captionBody, item.link, cfg, articleUrl);
+    await sendMessage(env, cfg.channelId, text, markup);
     return true;
   }
 
-  const caption = buildCaption(captionBody, item.link, cfg, articleUrl);
   if (image.kind === 'url') {
     // og:image is a remote URL (rare fallback) — sent as-is, not watermarked.
-    await sendPhoto(env, cfg.channelId, image.url, caption);
+    await sendPhoto(env, cfg.channelId, image.url, caption, markup);
   } else {
     const finalBytes = await applyWatermark(env, cfg, image.bytes);
-    await sendPhoto(env, cfg.channelId, finalBytes, caption);
+    await sendPhoto(env, cfg.channelId, finalBytes, caption, markup);
   }
   return true;
 }

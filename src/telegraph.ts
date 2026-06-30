@@ -14,6 +14,22 @@ interface Block {
   type: 'p' | 'h' | 'img';
   text?: string;
   src?: string;
+  caption?: string;
+}
+
+// End-of-article boundaries: once one of these is hit, stop collecting — the
+// rest is author bio, "you may also like", comment forms, newsletter and
+// footer boilerplate (anchored at the start to avoid matching mid-paragraph).
+const START_BOUNDARY =
+  /^\s*(you (may|might) also|related\b|more (from|stories)|recommended|most popular|trending|leave a (reply|comment)|post a comment|comments?\b|choose your news|about the author|read more\b|get the latest|sign up for|subscribe|follow us|share (this|on)|tags?:|filed under|continue reading|advertisement|newsletter|join our)/i;
+const STRONG_FOOTER =
+  /(powered by salesforce|terms (&|and) conditions|privacy (notice|policy)|all rights reserved|©\s*\d{4})/i;
+// "X is a/an [adjectives] writer/journalist/..." — the author bio at the end.
+const AUTHOR_BIO =
+  /\bis an?\b[a-z\s,'’-]{0,40}\b(writer|journalist|reporter|freelance|photographer|editor|contributor|correspondent|author|columnist|blogger)\b/i;
+
+function isArticleEnd(text: string): boolean {
+  return STRONG_FOOTER.test(text) || START_BOUNDARY.test(text) || AUTHOR_BIO.test(text);
 }
 
 /**
@@ -41,13 +57,22 @@ export async function publishTranslatedArticle(
       return null;
     }
 
-    // Translate the title + every text block in one ordered pass.
-    const source = [title || item.title, ...textBlocks.map((b) => b.text ?? '')];
-    const translated = await translateTexts(env, cfg, source);
+    // Build the ordered list of strings to translate: title, then each block's
+    // text (paragraphs/headings) or image caption — in document order.
+    const toTranslate: string[] = [title || item.title];
+    for (const b of blocks) {
+      if (b.type === 'img') {
+        if (b.caption) toTranslate.push(b.caption);
+      } else {
+        toTranslate.push(b.text ?? '');
+      }
+    }
+
+    const translated = await translateTexts(env, cfg, toTranslate);
     budget.spend(cfg.est.translate);
 
     const translatedTitle = (translated[0] || item.title).slice(0, 256);
-    const nodes = buildNodes(blocks, translated.slice(1), item, cfg);
+    const nodes = buildNodes(blocks, translated, item, cfg);
 
     return await createPage(token, translatedTitle, cfg, nodes);
   } catch (e) {
@@ -102,28 +127,48 @@ export function extractArticle(
   const region = fetchArticleRegion(html);
   const blocks: Block[] = [];
   const seenImages = new Set<string>();
+  let paragraphs = 0;
 
-  // Match headings, paragraphs and images in document order.
-  const re = /<(h[1-4]|p)\b[^>]*>([\s\S]*?)<\/\1>|<img\b[^>]*>/gi;
+  const pushImage = (rawSrc: string | null, caption?: string): void => {
+    if (!rawSrc) return;
+    const abs = absoluteUrl(baseUrl, decodeEntities(rawSrc));
+    if (isUsableImage(abs) && !seenImages.has(abs)) {
+      seenImages.add(abs);
+      blocks.push({ type: 'img', src: abs, caption: caption || undefined });
+    }
+  };
+
+  // Match <figure> (image + caption), headings, paragraphs and bare images,
+  // all in document order.
+  const re = /<figure\b[^>]*>([\s\S]*?)<\/figure>|<(h[1-4]|p)\b[^>]*>([\s\S]*?)<\/\2>|<img\b[^>]*>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(region)) !== null && blocks.length < maxBlocks) {
-    if (m[1]) {
-      const tag = m[1].toLowerCase();
-      const text = cleanText(m[2]);
+    if (m[1] !== undefined) {
+      // <figure>: pull the image and its caption.
+      const caption = cleanText(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i.exec(m[1])?.[1]);
+      pushImage(imageSrc(m[1]), caption.length <= 300 ? caption : '');
+    } else if (m[2] !== undefined) {
+      const tag = m[2].toLowerCase();
+      const text = cleanText(m[3]);
+      // Stop at end-of-article boilerplate (only once we're past the intro).
+      if (paragraphs >= 2 && isArticleEnd(text)) {
+        // Drop trailing junk images (author headshot, related thumbnails) that
+        // were collected just before the boundary — they have no caption.
+        while (blocks.length && blocks[blocks.length - 1].type === 'img' && !blocks[blocks.length - 1].caption) {
+          blocks.pop();
+        }
+        break;
+      }
       if (tag === 'p') {
-        if (text.length >= 60) blocks.push({ type: 'p', text });
+        if (text.length >= 60) {
+          blocks.push({ type: 'p', text });
+          paragraphs++;
+        }
       } else if (text.length >= 3 && text.length <= 140) {
         blocks.push({ type: 'h', text });
       }
     } else {
-      const src = imageSrc(m[0]);
-      if (src) {
-        const abs = absoluteUrl(baseUrl, decodeEntities(src));
-        if (isUsableImage(abs) && !seenImages.has(abs)) {
-          seenImages.add(abs);
-          blocks.push({ type: 'img', src: abs });
-        }
-      }
+      pushImage(imageSrc(m[0]));
     }
   }
   return { title, blocks };
@@ -142,21 +187,26 @@ function isUsableImage(url: string): boolean {
 
 // --- Telegraph node tree ---
 
-function buildNodes(blocks: Block[], translations: string[], item: FeedItem, cfg: Config): Node[] {
+function buildNodes(blocks: Block[], translated: string[], item: FeedItem, cfg: Config): Node[] {
   const nodes: Node[] = [];
-  let t = 0; // index into translations (text blocks only)
+  let t = 1; // translated[0] is the title; block strings follow in order
 
   for (const block of blocks) {
     if (block.type === 'img') {
-      nodes.push({ tag: 'figure', children: [{ tag: 'img', attrs: { src: block.src! } }] });
+      const children: Node[] = [{ tag: 'img', attrs: { src: block.src! } }];
+      if (block.caption) {
+        const cap = translated[t++] || block.caption;
+        children.push({ tag: 'figcaption', children: [cap] });
+      }
+      nodes.push({ tag: 'figure', children });
     } else {
-      const text = translations[t++] || block.text || '';
+      const text = translated[t++] || block.text || '';
       if (!text) continue;
       nodes.push({ tag: block.type === 'h' ? 'h3' : 'p', children: [text] });
     }
   }
 
-  // Footer: source + how the translation was made + AI-error disclaimer.
+  // Footer: source + how it was translated (no model name) + AI-error disclaimer.
   nodes.push({ tag: 'hr' });
   nodes.push({
     tag: 'p',
@@ -165,7 +215,7 @@ function buildNodes(blocks: Block[], translations: string[], item: FeedItem, cfg
   nodes.push({
     tag: 'p',
     children: [
-      { tag: 'em', children: [`Перевод выполнен автоматически (нейросеть ${cfg.translateModel}). Возможны неточности и ошибки перевода — сверяйтесь с оригиналом.`] },
+      { tag: 'em', children: ['Перевод выполнен автоматически нейросетью — возможны неточности и ошибки, сверяйтесь с оригиналом.'] },
     ],
   });
   nodes.push({

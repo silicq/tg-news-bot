@@ -26,25 +26,35 @@ function languageName(code: string): string {
 export async function makeCaption(env: Env, cfg: Config, item: FeedItem): Promise<string> {
   const lang = languageName(cfg.captionLang);
   const system =
-    `You write short, catchy captions for a Telegram channel in ${lang} ` +
-    `(language code "${cfg.captionLang}").\n` +
-    `Tone: ${cfg.captionTone}.\n` +
+    `You write punchy captions for a Telegram news channel in ${lang} ` +
+    `(language code "${cfg.captionLang}"). Tone: ${cfg.captionTone}.\n\n` +
+    `Write ONE caption of 2-3 sentences that makes the reader want to know more ` +
+    `AND already gives them something concrete.\n` +
     `Rules:\n` +
-    `- 2 to 4 sentences maximum.\n` +
-    `- Use your OWN words. Do NOT copy or closely paraphrase sentences from the source.\n` +
-    `- No clickbait lies, no ALL CAPS.\n` +
-    `- At most 1-2 relevant emoji.\n` +
-    `- Do NOT include any links, URLs or "read more".\n` +
-    `- Output ONLY the caption text, nothing else.`;
+    `- Lead with the single most surprising or specific fact: a number, a name, ` +
+    `a place, an unexpected detail. Concreteness over vague praise.\n` +
+    `- Deliver the gist so it's interesting even without opening the link, but ` +
+    `leave a little intrigue (hint at the "how/why", don't retell everything).\n` +
+    `- NEVER write empty filler like "amazing discovery", "stunning artwork", ` +
+    `"scientists found something" without saying WHAT exactly and WHY it matters.\n` +
+    `- Your OWN words; do not copy sentences from the source. No clickbait lies, no ALL CAPS.\n` +
+    `- Exactly one fitting emoji at the end. No hashtags, no links, no "read more".\n` +
+    `- Output ONLY the caption text.\n\n` +
+    `BAD (vague, no specifics): "В Риме открыли потрясающие фрески этрусков. ` +
+    `Они рассказывают об эпических битвах. 🏯"\n` +
+    `GOOD (concrete + hook): "Италия выкупила за миллионы и впервые показала ` +
+    `публике этрусские фрески возрастом ~2500 лет — на них сцены поединков, ` +
+    `почти не сохранившиеся в античном искусстве. Откуда они взялись — отдельная ` +
+    `детективная история. 🏛️"`;
 
   const summary = item.description
-    ? `\nContext (do not copy): ${truncate(stripTags(item.description), 600)}`
+    ? `\nDetails to mine for specifics (do not copy wording): ${truncate(stripTags(item.description), 900)}`
     : '';
   const user = `Headline: ${item.title}${summary}\n\nWrite the caption now.`;
 
   const out = await runText(env, cfg.textModel, system, user, {
     maxTokens: 256,
-    temperature: 0.75,
+    temperature: 0.7,
   });
 
   const body = stripTags(out).replace(/^["'<>]+|["'<>]+$/g, '').trim();
@@ -79,4 +89,22 @@ function buildFooter(link: string, cfg: Config, articleUrl?: string | null): str
 export function buildMessage(body: string, link: string, cfg: Config, articleUrl?: string | null): string {
   // sendMessage allows 4096 chars, so the same builder fits comfortably.
   return buildCaption(body, link, cfg, articleUrl);
+}
+
+/** Caption with NO footer links — used when links live in inline buttons instead. */
+export function buildBody(body: string): string {
+  return truncate(escapeHtml(body), TELEGRAM_CAPTION_LIMIT);
+}
+
+export interface InlineButton {
+  text: string;
+  url: string;
+}
+
+/** Inline keyboard: [📖 Перевод] [🔗 Источник] (translation button only if present). */
+export function buildButtons(link: string, cfg: Config, articleUrl?: string | null): InlineButton[][] {
+  const row: InlineButton[] = [];
+  if (articleUrl) row.push({ text: cfg.articleReadLabel, url: articleUrl });
+  row.push({ text: `🔗 ${cfg.sourceLabel}`, url: link });
+  return [row];
 }

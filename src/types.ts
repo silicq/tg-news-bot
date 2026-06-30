@@ -57,6 +57,7 @@ export interface Env {
   TELEGRAPH_AUTHOR_URL?: string;
   ARTICLE_MAX_BLOCKS?: string;
   ARTICLE_READ_LABEL?: string;
+  BUTTONS_ENABLED?: string;
   EST_NEURONS_RANK?: string;
   EST_NEURONS_CAPTION?: string;
   EST_NEURONS_IMAGE_PROMPT?: string;
@@ -111,6 +112,7 @@ export interface Config {
   telegraphAuthorUrl: string;
   articleMaxBlocks: number;
   articleReadLabel: string;
+  buttonsEnabled: boolean;
   historyRetentionDays: number;
   est: {
     rank: number;

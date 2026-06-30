@@ -1,5 +1,5 @@
 import { createTracker, loadDailyUsage, saveDailyUsage } from './budget';
-import { buildCaption, buildMessage, makeCaption } from './caption';
+import { buildBody, buildButtons, buildCaption, buildMessage, makeCaption } from './caption';
 import { countPosted } from './dedup';
 import { fetchAllFeeds } from './feeds';
 import { applyWatermark, fetchOgImage, generateImage, makeImagePrompt } from './image';
@@ -92,16 +92,23 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
     }
 
     // --- 5. Вотермарка + отправка тестового поста админу в личку ---
+    const markup = cfg.buttonsEnabled
+      ? { inline_keyboard: buildButtons(item.link, cfg, articleUrl) }
+      : undefined;
+    const caption = cfg.buttonsEnabled
+      ? buildBody(captionBody)
+      : buildCaption(captionBody, item.link, cfg, articleUrl);
     if (photo) {
       if (typeof photo === 'string') {
-        await sendPhoto(env, admin, photo, buildCaption(captionBody, item.link, cfg, articleUrl));
+        await sendPhoto(env, admin, photo, caption, markup);
       } else {
         const watermarked = await applyWatermark(env, cfg, photo);
         steps.push(cfg.watermarkEnabled ? 'Вотермарка @monkeydiary: наложена' : 'Вотермарка: выключена');
-        await sendPhoto(env, admin, watermarked, buildCaption(captionBody, item.link, cfg, articleUrl));
+        await sendPhoto(env, admin, watermarked, caption, markup);
       }
     } else {
-      await sendMessage(env, admin, buildMessage(captionBody, item.link, cfg, articleUrl));
+      const text = cfg.buttonsEnabled ? buildBody(captionBody) : buildMessage(captionBody, item.link, cfg, articleUrl);
+      await sendMessage(env, admin, text, markup);
     }
     steps.push('Отправка тестового поста в личку: OK');
 

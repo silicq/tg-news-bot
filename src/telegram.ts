@@ -32,12 +32,14 @@ export async function sendMessage(
   env: Env,
   chatId: string | number,
   text: string,
+  replyMarkup?: object,
 ): Promise<void> {
   await tgApi(env, 'sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: 'HTML',
     disable_web_page_preview: false,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
 }
 
@@ -51,11 +53,13 @@ export async function sendPhoto(
   chatId: string | number,
   photo: Uint8Array | string,
   caption: string,
+  replyMarkup?: object,
 ): Promise<void> {
   const form = new FormData();
   form.append('chat_id', String(chatId));
   form.append('caption', caption);
   form.append('parse_mode', 'HTML');
+  if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
 
   if (typeof photo === 'string') {
     form.append('photo', photo);
