@@ -2,11 +2,13 @@ name = "tg-news-bot"
 main = "src/index.ts"
 compatibility_date = "2026-06-01"
 
-# How often the bot runs. Every 2 hours = 12 runs/day; quiet hours skip the
-# nighttime ones, leaving ~8 active runs. Actual posts/day ≈ active runs ×
+# Runs hourly so posts are spread evenly through the day (1 per run) instead of
+# bursts. Quiet hours skip the nighttime runs. Actual posts/day ≈ active runs ×
 # MAX_POSTS_PER_RUN, capped by MAX_POSTS_PER_DAY.
+# Hourly posting run + a daily reaction review at 23:50 UTC (before the neuron
+# limits reset), which learns what the audience likes from 👍/👎.
 [triggers]
-crons = ["0 */2 * * *"]
+crons = ["0 * * * *", "50 23 * * *"]
 
 # Workers AI binding -> env.AI
 [ai]
@@ -38,7 +40,7 @@ migrations_dir = "migrations"
 TELEGRAM_CHANNEL_ID = -1003770441052
 
 # RSS/Atom sources as a JSON array (single-quoted TOML literal, no escaping needed).
-RSS_FEEDS = '["https://www.sciencedaily.com/rss/top/science.xml","https://www.nasa.gov/feed/","https://www.goodnewsnetwork.org/feed/","https://www.positive.news/feed/","https://www.smithsonianmag.com/rss/latest_articles/","https://www.atlasobscura.com/feeds/latest"]'
+RSS_FEEDS = '["https://www.sciencedaily.com/rss/top/science.xml","https://www.nasa.gov/feed/","https://www.goodnewsnetwork.org/feed/","https://www.positive.news/feed/","https://www.smithsonianmag.com/rss/latest_articles/","https://www.atlasobscura.com/feeds/latest","https://www.sciencealert.com/feed","https://phys.org/rss-feed/","https://www.thisiscolossal.com/feed/","https://mymodernmet.com/feed/","https://earthsky.org/feed/","https://www.nicenews.com/feed/","https://reasonstobecheerful.world/feed/","https://www.iflscience.com/rss.xml"]'
 
 # Audience / topic description used to rank news. Keep it specific.
 CHANNEL_THEME = "Позитивный канал для поднятия настроения. Темы: животные, юмор и смешное, наука, космос, дизайн, удивительные факты о мире. Отбирай добрые, любопытные, вдохновляющие новости. Исключай негатив, политику, трагедии, насилие, тяжёлые темы."
@@ -46,6 +48,8 @@ CHANNEL_THEME = "Позитивный канал для поднятия нас�
 # Caption language code and tone.
 CAPTION_LANG = "ru"
 CAPTION_TONE = "живой, тёплый, с лёгкой интригой, без кликбейта-обмана"
+# Let the model emphasize with <b>/<i>/<u> in the caption (sanitized). false = plain text.
+CAPTION_FORMATTING = "true"
 
 # Label shown on the source link at the end of each caption.
 SOURCE_LABEL = "Источник"
@@ -57,9 +61,9 @@ CREDIT_URL = "https://t.me/monkeydiary"
 # Only consider feed entries newer than this many hours.
 MAX_AGE_HOURS = "24"
 
-# Posting caps. Only ~2k of the 10k daily neurons get used, so there's lots of
-# headroom — raised the day cap. Actual posts ≈ active runs × MAX_POSTS_PER_RUN.
-MAX_POSTS_PER_RUN = "2"
+# Posting caps. 1 post per hourly run spreads them across the day; the day cap
+# keeps the total sane. Budget has plenty of headroom.
+MAX_POSTS_PER_RUN = "1"
 MAX_POSTS_PER_DAY = "16"
 
 # Minimum AI relevance score (0-100) required to publish.
@@ -109,12 +113,12 @@ DAILY_NEURON_BUDGET = "9000"
 # Text model: cheap + fast. Swap to @cf/meta/llama-3.3-70b-instruct-fp8-fast
 # for higher-quality ranking if your budget allows.
 TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
-# Primary image model: flux-1-schnell — best "AI look", cheap neurons.
-# NOTE: flux-1-schnell ALWAYS returns a square image (it has no width/height
-# parameter). IMAGE_WIDTH/HEIGHT below apply only to the fallback/SDXL models.
-IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
-# Diffusion steps for flux-1-schnell (default 4, max 8). Fewer = cheaper.
-IMAGE_STEPS = "4"
+# Primary image model: flux-2-klein-4b — flux "AI look", higher quality, and
+# it honours width/height so posts come out 16:9. (flux-1-schnell is cheaper but
+# square-only — switch back to it if you want to save neurons.)
+IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
+# Steps for the primary flux model. 6 = good quality/speed for klein.
+IMAGE_STEPS = "6"
 
 # Free fallback image model. Used when the neuron budget is low or the primary
 # model fails — keeps the AI-generated look (instead of jumping to og:image).
@@ -144,11 +148,25 @@ TELEGRAPH_AUTHOR_NAME = "@monkeydiary"
 TELEGRAPH_AUTHOR_URL = "https://t.me/monkeydiary"
 ARTICLE_MAX_BLOCKS = "25"
 ARTICLE_READ_LABEL = "📖 Перевод"
+# Max original article photos to add to an album post (0 disables album images).
+ARTICLE_MAX_IMAGES = "2"
 
 # Show source/translation links as tappable inline buttons under the post
 # (cleaner) instead of links inside the caption text. The @monkeydiary credit
 # stays on the image watermark, so it isn't duplicated as a button.
 BUTTONS_ENABLED = "true"
+
+# Category label at the top of each post (🌌 Космос / 🐾 Животные / …). Free.
+RUBRICS_ENABLED = "true"
+
+# When the article has original photos, post [AI-image + up to ARTICLE_MAX_IMAGES
+# originals] as an album. Albums can't have inline buttons, so links go in the
+# caption for those posts.
+ALBUMS_ENABLED = "true"
+
+# Learn audience taste from 👍/👎 reactions and fold it into ranking (reviewed
+# once a day). Requires reactions enabled on the channel.
+REACTIONS_ENABLED = "true"
 # Translation model (defaults to TEXT_MODEL). m2m100 etc. can be set here.
 # TRANSLATE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
 

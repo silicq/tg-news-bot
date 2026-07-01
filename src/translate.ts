@@ -45,10 +45,16 @@ async function translateBatch(
   target: string,
 ): Promise<string[]> {
   const system =
-    `You are a professional translator. Translate each numbered news fragment into ${target}. ` +
-    `Keep the same numbering and order. Translate faithfully and naturally; if a fragment is ` +
-    `already in ${target}, return it unchanged. Do not add commentary. ` +
-    `Output ONLY the translated numbered list.`;
+    `You are a professional native ${target} translator. Translate each numbered ` +
+    `news fragment into fluent, grammatically correct, natural ${target} — the way a ` +
+    `native journalist would write it, not a word-for-word calque.\n` +
+    `Rules:\n` +
+    `- Correct grammar, gender and case agreement; smooth awkward literal phrasings.\n` +
+    `- Do NOT transliterate letter-by-letter; keep proper nouns/brands in their usual ` +
+    `form (translate or keep Latin as appropriate), never mix scripts inside a word.\n` +
+    `- Keep the meaning faithful; do not add or drop information or commentary.\n` +
+    `- If a fragment is already in ${target}, return it unchanged.\n` +
+    `- Keep the exact same numbering and order. Output ONLY the translated numbered list.`;
   const user = batch.map((t, i) => `${i + 1}. ${t}`).join('\n\n');
 
   const raw = await runText(env, cfg.translateModel, system, user, {

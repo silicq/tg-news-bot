@@ -24,6 +24,7 @@ export function helpText(): string {
     '',
     '/test — самопроверка: пришлёт тестовый пост (фото + подпись) сюда в личку и проверит связь с каналом.',
     '/stats — статистика за сутки: опубликовано, пропущено, расход нейронов и лимиты Cloudflare.',
+    '/settings — панель настроек: всё меняется прямо из Telegram, без кода и Cloudflare.',
     '/run — выполнить обычный цикл публикации прямо сейчас.',
     '/help — это сообщение.',
   ].join('\n');
@@ -61,7 +62,7 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
       spent += cfg.est.caption;
       steps.push('Текстовая модель (подпись): OK');
     } catch (e) {
-      captionBody = item.title;
+      captionBody = escapeHtml(item.title);
       steps.push('⚠️ Подпись через AI не удалась, использую заголовок: ' + String(e));
     }
 
@@ -86,7 +87,8 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
     let articleUrl: string | null = null;
     if (cfg.telegraphEnabled) {
       const tracker = await createTracker(env.DB, cfg);
-      articleUrl = await publishTranslatedArticle(env, cfg, item, tracker);
+      const article = await publishTranslatedArticle(env, cfg, item, tracker);
+      articleUrl = article?.url ?? null;
       spent += tracker.spentThisRun;
       steps.push(articleUrl ? 'Telegraph-статья с переводом: ' + articleUrl : '⚠️ Статью собрать не удалось (мало текста/недоступна)');
     }

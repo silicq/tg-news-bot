@@ -1,6 +1,6 @@
 import { runText } from './ai';
 import type { Config, Env, FeedItem } from './types';
-import { escapeHtml, stripTags, truncate } from './util';
+import { decodeEntities, escapeHtml, sanitizeTelegramHtml, stripTags, truncate } from './util';
 
 // Telegram hard limit for a photo caption.
 const TELEGRAM_CAPTION_LIMIT = 1024;
@@ -20,11 +20,16 @@ function languageName(code: string): string {
 
 /**
  * Write a short, original caption in the configured language and tone.
- * Importantly, it must NOT copy sentences from the source (copyright).
- * Returns the caption BODY only (no link) — the link is appended by buildCaption.
+ * Must NOT copy sentences from the source (copyright). Returns SAFE Telegram
+ * HTML (sanitized) — the body only; links/footer are added by the builders.
  */
 export async function makeCaption(env: Env, cfg: Config, item: FeedItem): Promise<string> {
   const lang = languageName(cfg.captionLang);
+  const formatRule = cfg.captionFormatting
+    ? `- You MAY emphasize with <b>bold</b>, <i>italic</i> or <u>underline</u> ` +
+      `(Telegram HTML). Use sparingly — bold the key hook, 1-2 highlights max. No other tags.\n`
+    : `- Plain text only. No HTML, no markdown.\n`;
+
   const system =
     `You write punchy captions for a Telegram news channel in ${lang} ` +
     `(language code "${cfg.captionLang}"). Tone: ${cfg.captionTone}.\n\n` +
@@ -38,39 +43,45 @@ export async function makeCaption(env: Env, cfg: Config, item: FeedItem): Promis
     `- NEVER write empty filler like "amazing discovery", "stunning artwork", ` +
     `"scientists found something" without saying WHAT exactly and WHY it matters.\n` +
     `- Your OWN words; do not copy sentences from the source. No clickbait lies, no ALL CAPS.\n` +
+    formatRule +
     `- Exactly one fitting emoji at the end. No hashtags, no links, no "read more".\n` +
     `- Output ONLY the caption text.\n\n` +
     `BAD (vague, no specifics): "В Риме открыли потрясающие фрески этрусков. ` +
     `Они рассказывают об эпических битвах. 🏯"\n` +
-    `GOOD (concrete + hook): "Италия выкупила за миллионы и впервые показала ` +
-    `публике этрусские фрески возрастом ~2500 лет — на них сцены поединков, ` +
-    `почти не сохранившиеся в античном искусстве. Откуда они взялись — отдельная ` +
-    `детективная история. 🏛️"`;
+    `GOOD (concrete + hook): "<b>Италия выкупила за миллионы</b> и впервые ` +
+    `показала публике этрусские фрески возрастом ~2500 лет — на них сцены ` +
+    `поединков, почти не сохранившиеся в античном искусстве. Откуда они взялись ` +
+    `— отдельная детективная история. 🏛️"`;
 
   const summary = item.description
     ? `\nDetails to mine for specifics (do not copy wording): ${truncate(stripTags(item.description), 900)}`
     : '';
   const user = `Headline: ${item.title}${summary}\n\nWrite the caption now.`;
 
-  const out = await runText(env, cfg.textModel, system, user, {
-    maxTokens: 256,
-    temperature: 0.7,
-  });
+  let out = (
+    await runText(env, cfg.textModel, system, user, { maxTokens: 256, temperature: 0.7 })
+  ).trim();
+  out = out.replace(/^["']+|["']+$/g, '').trim();
 
-  const body = stripTags(out).replace(/^["'<>]+|["'<>]+$/g, '').trim();
-  return body || item.title;
+  const body = cfg.captionFormatting ? sanitizeTelegramHtml(out) : escapeHtml(stripTags(out));
+  return body || escapeHtml(item.title);
 }
 
 /**
- * Assemble the final HTML caption: escaped body + a clickable source link,
- * trimmed to Telegram's 1024-char limit. We measure the raw string (tags
- * included), which is stricter than Telegram's count — safe on the short side.
+ * Fit already-safe HTML into `room` chars. If it fits, keep the formatting;
+ * otherwise fall back to plain escaped text (always valid) so truncation can't
+ * leave a broken tag.
  */
+function fit(html: string, room: number): string {
+  const cap = Math.max(0, room);
+  if (html.length <= cap) return html;
+  return truncate(escapeHtml(decodeEntities(stripTags(html))), cap);
+}
+
+/** Final caption: safe HTML body + source/credit footer, within 1024 chars. */
 export function buildCaption(body: string, link: string, cfg: Config, articleUrl?: string | null): string {
   const footer = buildFooter(link, cfg, articleUrl);
-  const room = TELEGRAM_CAPTION_LIMIT - footer.length;
-  const safeBody = truncate(escapeHtml(body), Math.max(0, room));
-  return safeBody + footer;
+  return fit(body, TELEGRAM_CAPTION_LIMIT - footer.length) + footer;
 }
 
 /** Footer: source link + optional "read translation" link + channel credit. */
@@ -93,7 +104,7 @@ export function buildMessage(body: string, link: string, cfg: Config, articleUrl
 
 /** Caption with NO footer links — used when links live in inline buttons instead. */
 export function buildBody(body: string): string {
-  return truncate(escapeHtml(body), TELEGRAM_CAPTION_LIMIT);
+  return fit(body, TELEGRAM_CAPTION_LIMIT);
 }
 
 export interface InlineButton {

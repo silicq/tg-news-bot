@@ -21,7 +21,7 @@ interface Block {
 // rest is author bio, "you may also like", comment forms, newsletter and
 // footer boilerplate (anchored at the start to avoid matching mid-paragraph).
 const START_BOUNDARY =
-  /^\s*(you (may|might) also|related\b|more (from|stories)|recommended|most popular|trending|leave a (reply|comment)|post a comment|comments?\b|choose your news|about the author|read more\b|get the latest|sign up for|subscribe|follow us|share (this|on)|tags?:|filed under|continue reading|advertisement|newsletter|join our)/i;
+  /^\s*(you (may|might) also|related\b|more (from|stories)|explore (more|topics)|discover more|browse\b|recommended|most popular|trending|leave a (reply|comment)|post a comment|comments?\b|choose your news|about the author|read more\b|get the latest|sign up for|subscribe|follow us|share (this|on)|tags?:|filed under|continue reading|advertisement|newsletter|join our)/i;
 const STRONG_FOOTER =
   /(powered by salesforce|terms (&|and) conditions|privacy (notice|policy)|all rights reserved|©\s*\d{4})/i;
 // "X is a/an [adjectives] writer/journalist/..." — the author bio at the end.
@@ -37,12 +37,17 @@ function isArticleEnd(text: string): boolean {
  * return its URL, or null on any failure (the post still goes out without it).
  * Spends cfg.est.translate neurons on success.
  */
+export interface ArticleResult {
+  url: string;
+  images: string[]; // original article image URLs (for albums)
+}
+
 export async function publishTranslatedArticle(
   env: Env,
   cfg: Config,
   item: FeedItem,
   budget: BudgetTracker,
-): Promise<string | null> {
+): Promise<ArticleResult | null> {
   try {
     const token = await getToken(env, cfg);
     if (!token) return null;
@@ -52,7 +57,8 @@ export async function publishTranslatedArticle(
 
     const { title, blocks } = extractArticle(html, item.link, cfg.articleMaxBlocks);
     const textBlocks = blocks.filter((b) => b.type !== 'img');
-    if (textBlocks.length < 2) {
+    if (textBlocks.length < 4) {
+      // Too thin to be a worthwhile article (e.g. a stub/announcement page).
       log('telegraph: not enough article text extracted, skipping article');
       return null;
     }
@@ -74,7 +80,10 @@ export async function publishTranslatedArticle(
     const translatedTitle = (translated[0] || item.title).slice(0, 256);
     const nodes = buildNodes(blocks, translated, item, cfg);
 
-    return await createPage(token, translatedTitle, cfg, nodes);
+    const url = await createPage(token, translatedTitle, cfg, nodes);
+    if (!url) return null;
+    const images = blocks.filter((b) => b.type === 'img' && b.src).map((b) => b.src!);
+    return { url, images };
   } catch (e) {
     log('telegraph article failed:', String(e));
     return null;

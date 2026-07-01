@@ -111,12 +111,17 @@ export async function makeImagePrompt(env: Env, cfg: Config, item: FeedItem): Pr
   return `${prompt}. High quality, detailed, no text, no watermark.`;
 }
 
-/** Per-model input shape. flux-1-schnell only takes prompt+steps (square output). */
+/** Per-model input shape (schemas differ across model families). */
 function buildImageInputs(model: string, cfg: Config, prompt: string): Record<string, unknown> {
   if (/flux-1-schnell/i.test(model)) {
+    // flux-1-schnell: only prompt + steps, always square output.
     return { prompt, steps: cfg.imageSteps };
   }
-  // SDXL / SD1.5 / dreamshaper family: width/height + num_steps.
+  if (/flux/i.test(model)) {
+    // flux-2 family (klein/dev): prompt + steps + width/height (16:9 capable).
+    return { prompt, steps: cfg.imageSteps, width: cfg.imageWidth, height: cfg.imageHeight };
+  }
+  // SDXL / SD1.5 / dreamshaper family: num_steps + width/height.
   return {
     prompt,
     num_steps: cfg.imageStepsFallback,

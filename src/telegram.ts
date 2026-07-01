@@ -27,20 +27,96 @@ export async function tgApi<T = unknown>(
   return data.result as T;
 }
 
-/** Publish/send a text message (HTML). Used for posts and admin replies. */
+/** Publish/send a text message (HTML). Returns the new message id. */
 export async function sendMessage(
   env: Env,
   chatId: string | number,
   text: string,
   replyMarkup?: object,
-): Promise<void> {
-  await tgApi(env, 'sendMessage', {
+): Promise<number | null> {
+  const res = await tgApi<{ message_id?: number }>(env, 'sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: 'HTML',
     disable_web_page_preview: false,
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
+  return res?.message_id ?? null;
+}
+
+/** Edit an existing message's text + inline keyboard (used by the admin panel). */
+export function editMessageText(
+  env: Env,
+  chatId: string | number,
+  messageId: number,
+  text: string,
+  replyMarkup?: object,
+): Promise<unknown> {
+  return tgApi(env, 'editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  }).catch(() => undefined); // ignore "message is not modified" etc.
+}
+
+/** Acknowledge a callback query (stops the button's loading spinner). */
+export function answerCallback(env: Env, callbackId: string, text?: string): Promise<unknown> {
+  return tgApi(env, 'answerCallbackQuery', {
+    callback_query_id: callbackId,
+    ...(text ? { text } : {}),
+  }).catch(() => undefined);
+}
+
+export interface AlbumPhoto {
+  media: Uint8Array | string; // bytes (uploaded) or a URL
+  caption?: string; // only the first item's caption is shown by Telegram
+}
+
+/**
+ * Send 2-10 photos as a media group (album). No inline keyboard is possible on
+ * albums, so links must live in the caption. Returns the first message id.
+ */
+export async function sendMediaGroup(
+  env: Env,
+  chatId: string | number,
+  photos: AlbumPhoto[],
+): Promise<number | null> {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+
+  const media: Array<Record<string, unknown>> = [];
+  let fileIndex = 0;
+  for (const p of photos) {
+    const item: Record<string, unknown> = { type: 'photo' };
+    if (typeof p.media === 'string') {
+      item.media = p.media;
+    } else {
+      const name = `file${fileIndex++}`;
+      form.append(name, new Blob([asArrayBuffer(p.media)], { type: 'image/jpeg' }), `${name}.jpg`);
+      item.media = `attach://${name}`;
+    }
+    if (p.caption) {
+      item.caption = p.caption;
+      item.parse_mode = 'HTML';
+    }
+    media.push(item);
+  }
+  form.append('media', JSON.stringify(media));
+
+  const res = await fetch(apiUrl(env.TELEGRAM_BOT_TOKEN, 'sendMediaGroup'), { method: 'POST', body: form });
+  let data: { ok?: boolean; result?: Array<{ message_id?: number }>; description?: string } = {};
+  try {
+    data = (await res.json()) as typeof data;
+  } catch {
+    /* fall through */
+  }
+  if (!res.ok || !data.ok) {
+    throw new Error(`Telegram sendMediaGroup failed (${res.status}): ${data.description ?? 'unknown error'}`);
+  }
+  return data.result?.[0]?.message_id ?? null;
 }
 
 /**
@@ -54,7 +130,7 @@ export async function sendPhoto(
   photo: Uint8Array | string,
   caption: string,
   replyMarkup?: object,
-): Promise<void> {
+): Promise<number | null> {
   const form = new FormData();
   form.append('chat_id', String(chatId));
   form.append('caption', caption);
@@ -73,7 +149,7 @@ export async function sendPhoto(
     method: 'POST',
     body: form,
   });
-  let data: { ok?: boolean; description?: string } = {};
+  let data: { ok?: boolean; result?: { message_id?: number }; description?: string } = {};
   try {
     data = (await res.json()) as typeof data;
   } catch {
@@ -82,6 +158,7 @@ export async function sendPhoto(
   if (!res.ok || !data.ok) {
     throw new Error(`Telegram sendPhoto failed (${res.status}): ${data.description ?? 'unknown error'}`);
   }
+  return data.result?.message_id ?? null;
 }
 
 export interface TgUser {
@@ -122,7 +199,7 @@ export function getChatMember(
 export function setWebhook(env: Env, url: string, secretToken?: string): Promise<unknown> {
   return tgApi(env, 'setWebhook', {
     url,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query', 'message_reaction_count'],
     drop_pending_updates: true,
     ...(secretToken ? { secret_token: secretToken } : {}),
   });

@@ -22,6 +22,7 @@ export interface Env {
   CHANNEL_THEME: string;
   CAPTION_LANG?: string;
   CAPTION_TONE?: string;
+  CAPTION_FORMATTING?: string;
   SOURCE_LABEL?: string;
   CREDIT_TEXT?: string;
   CREDIT_URL?: string;
@@ -57,7 +58,11 @@ export interface Env {
   TELEGRAPH_AUTHOR_URL?: string;
   ARTICLE_MAX_BLOCKS?: string;
   ARTICLE_READ_LABEL?: string;
+  ARTICLE_MAX_IMAGES?: string;
   BUTTONS_ENABLED?: string;
+  RUBRICS_ENABLED?: string;
+  ALBUMS_ENABLED?: string;
+  REACTIONS_ENABLED?: string;
   EST_NEURONS_RANK?: string;
   EST_NEURONS_CAPTION?: string;
   EST_NEURONS_IMAGE_PROMPT?: string;
@@ -77,6 +82,7 @@ export interface Config {
   channelTheme: string;
   captionLang: string;
   captionTone: string;
+  captionFormatting: boolean;
   sourceLabel: string;
   creditText: string;
   creditUrl: string;
@@ -112,7 +118,11 @@ export interface Config {
   telegraphAuthorUrl: string;
   articleMaxBlocks: number;
   articleReadLabel: string;
+  articleMaxImages: number;
   buttonsEnabled: boolean;
+  rubricsEnabled: boolean;
+  albumsEnabled: boolean;
+  reactionsEnabled: boolean;
   historyRetentionDays: number;
   est: {
     rank: number;
@@ -151,10 +161,26 @@ export type ImageOutcome =
 export interface TelegramUpdate {
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
+  message_reaction_count?: TelegramReactionCount;
 }
 
 export interface TelegramMessage {
+  message_id?: number;
   text?: string;
   chat?: { id: number; type?: string };
   from?: { id: number; is_bot?: boolean; first_name?: string };
+}
+
+export interface TelegramCallbackQuery {
+  id: string;
+  data?: string;
+  from?: { id: number };
+  message?: { message_id: number; chat: { id: number } };
+}
+
+export interface TelegramReactionCount {
+  chat: { id: number };
+  message_id: number;
+  reactions: Array<{ type: { type: string; emoji?: string }; total_count: number }>;
 }

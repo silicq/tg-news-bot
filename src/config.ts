@@ -33,8 +33,12 @@ function parseFeeds(raw: string | undefined): string[] {
   return [];
 }
 
-/** Parse the raw env strings into a typed, validated config object. */
-export function loadConfig(env: Env): Config {
+/**
+ * Parse the raw env strings into a typed, validated config object.
+ * `overrides` (admin-edited settings from D1) take precedence over wrangler vars.
+ */
+export function loadConfig(env: Env, overrides: Record<string, string> = {}): Config {
+  env = { ...env, ...overrides } as Env;
   const imageMode = (str(env.IMAGE_MODE, 'generate') as ImageMode) || 'generate';
   const noImageBehavior = (str(env.NO_IMAGE_BEHAVIOR, 'og') as NoImageBehavior) || 'og';
 
@@ -44,11 +48,12 @@ export function loadConfig(env: Env): Config {
     channelTheme: str(env.CHANNEL_THEME, 'Interesting, positive, curious news.'),
     captionLang: str(env.CAPTION_LANG, 'ru'),
     captionTone: str(env.CAPTION_TONE, 'живой, тёплый, без кликбейта'),
+    captionFormatting: bool(env.CAPTION_FORMATTING, true),
     sourceLabel: str(env.SOURCE_LABEL, 'Источник'),
     creditText: str(env.CREDIT_TEXT, '@monkeydiary'),
     creditUrl: str(env.CREDIT_URL, 'https://t.me/monkeydiary'),
     maxAgeHours: num(env.MAX_AGE_HOURS, 24),
-    maxPostsPerRun: Math.max(0, num(env.MAX_POSTS_PER_RUN, 2)),
+    maxPostsPerRun: Math.max(0, num(env.MAX_POSTS_PER_RUN, 1)),
     maxPostsPerDay: Math.max(0, num(env.MAX_POSTS_PER_DAY, 16)),
     minScore: num(env.MIN_SCORE, 55),
     topicDedup: bool(env.TOPIC_DEDUP, true),
@@ -67,11 +72,11 @@ export function loadConfig(env: Env): Config {
     dailyNeuronBudget: num(env.DAILY_NEURON_BUDGET, 9000),
     textModel: str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast'),
     translateModel: str(env.TRANSLATE_MODEL, str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast')),
-    imageModel: str(env.IMAGE_MODEL, '@cf/black-forest-labs/flux-1-schnell'),
+    imageModel: str(env.IMAGE_MODEL, '@cf/black-forest-labs/flux-2-klein-4b'),
     // Free diffusion model used when the neuron budget is low or the primary
     // model fails. Keeps the AI-generated look (unlike og:image).
     imageModelFallback: str(env.IMAGE_MODEL_FALLBACK, '@cf/bytedance/stable-diffusion-xl-lightning'),
-    imageSteps: Math.min(8, Math.max(1, num(env.IMAGE_STEPS, 4))),
+    imageSteps: Math.max(1, num(env.IMAGE_STEPS, 6)),
     imageStepsFallback: Math.max(1, num(env.IMAGE_STEPS_FALLBACK, 8)),
     // Target dimensions for models that accept width/height (SDXL family).
     // NOTE: flux-1-schnell ignores these and always returns a square image.
@@ -86,9 +91,13 @@ export function loadConfig(env: Env): Config {
     telegraphAuthorUrl: str(env.TELEGRAPH_AUTHOR_URL, str(env.CREDIT_URL, 'https://t.me/monkeydiary')),
     articleMaxBlocks: Math.max(3, num(env.ARTICLE_MAX_BLOCKS, 25)),
     articleReadLabel: str(env.ARTICLE_READ_LABEL, '📖 Перевод'),
+    articleMaxImages: Math.max(0, Math.min(9, num(env.ARTICLE_MAX_IMAGES, 2))),
     // Put the source/translation links as tappable inline buttons instead of
     // links inside the caption text (cleaner look).
     buttonsEnabled: bool(env.BUTTONS_ENABLED, true),
+    rubricsEnabled: bool(env.RUBRICS_ENABLED, true),
+    albumsEnabled: bool(env.ALBUMS_ENABLED, true),
+    reactionsEnabled: bool(env.REACTIONS_ENABLED, true),
     historyRetentionDays: num(env.HISTORY_RETENTION_DAYS, 30),
     est: {
       rank: num(env.EST_NEURONS_RANK, 60),

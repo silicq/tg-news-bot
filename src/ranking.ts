@@ -1,4 +1,5 @@
 import { extractJsonArray, runText } from './ai';
+import { learnedPrefs } from './reactions';
 import type { Config, Env, FeedItem, RankedItem } from './types';
 import { log } from './util';
 
@@ -30,9 +31,13 @@ export async function rankItems(
 
   const numbered = candidates.map((it, i) => `${i}. ${it.title}`).join('\n');
 
+  // Fold in the audience's like/dislike signal learned from reactions.
+  const prefs = cfg.reactionsEnabled ? await learnedPrefs(env) : '';
+
   const system =
     `You are the editor of a Telegram channel.\n` +
     `Channel theme and audience: ${cfg.channelTheme}\n\n` +
+    (prefs ? `${prefs}\n\n` : '') +
     `For each numbered headline, rate from 0 to 100 how well it fits this ` +
     `channel and how engaging it is for that audience. Penalize anything the ` +
     `theme says to exclude.\n` +

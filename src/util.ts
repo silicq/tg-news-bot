@@ -66,6 +66,45 @@ export function stripTags(s: string): string {
     .trim();
 }
 
+// Inline tags Telegram accepts in captions/messages (we normalize synonyms).
+const TG_TAGS: Record<string, string> = {
+  b: 'b', strong: 'b', i: 'i', em: 'i', u: 'u', ins: 'u', s: 's', del: 's',
+  strike: 's', 'tg-spoiler': 'tg-spoiler', code: 'code',
+};
+
+/**
+ * Sanitize model output into safe Telegram HTML: keep only the allowed inline
+ * tags (attributes dropped), escape everything else, and guarantee the result
+ * is balanced (stray closers dropped, open tags auto-closed) so Telegram never
+ * rejects the message. Also converts **markdown bold** the model may emit.
+ */
+export function sanitizeTelegramHtml(input: string): string {
+  const md = input.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const re = /<(\/?)([a-z0-9-]+)(?:\s[^>]*)?>/gi;
+  const stack: string[] = [];
+  let out = '';
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(md)) !== null) {
+    out += escapeHtml(md.slice(last, m.index));
+    last = re.lastIndex;
+    const tag = TG_TAGS[m[2].toLowerCase()];
+    if (!tag) continue; // drop disallowed tags entirely
+    if (m[1] === '/') {
+      if (stack[stack.length - 1] === tag) {
+        out += `</${tag}>`;
+        stack.pop();
+      }
+    } else {
+      out += `<${tag}>`;
+      stack.push(tag);
+    }
+  }
+  out += escapeHtml(md.slice(last));
+  while (stack.length) out += `</${stack.pop()}>`;
+  return out.trim();
+}
+
 /** Clean a raw XML field: unwrap CDATA, decode entities, strip tags, trim. */
 export function cleanText(s: string | null | undefined): string {
   if (!s) return '';

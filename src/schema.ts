@@ -29,7 +29,25 @@ export async function ensureSchema(db: D1Database): Promise<void> {
          value TEXT
        )`,
     ),
+    // Admin-editable config overrides (key = env var name, value = string).
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS settings (
+         key   TEXT PRIMARY KEY,
+         value TEXT
+       )`,
+    ),
+    // Reaction tally per published channel message, for the daily preference review.
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS reactions (
+         message_id INTEGER PRIMARY KEY,
+         day        TEXT,
+         tokens     TEXT,
+         likes      INTEGER NOT NULL DEFAULT 0,
+         dislikes   INTEGER NOT NULL DEFAULT 0
+       )`,
+    ),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_posted_at ON posted (posted_at)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_reactions_day ON reactions (day)`),
   ]);
 
   // Add skipped_count to existing budget tables. Throws "duplicate column"
