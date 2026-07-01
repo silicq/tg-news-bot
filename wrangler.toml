@@ -160,10 +160,11 @@ BUTTONS_ENABLED = "true"
 # Category label at the top of each post (🌌 Космос / 🐾 Животные / …). Free.
 RUBRICS_ENABLED = "true"
 
-# When the article has original photos, post [AI-image + up to ARTICLE_MAX_IMAGES
-# originals] as an album. Albums can't have inline buttons, so links go in the
-# caption for those posts.
-ALBUMS_ENABLED = "true"
+# Albums (media group of AI-image + up to ARTICLE_MAX_IMAGES original photos).
+# OFF by default: Telegram media groups DON'T support inline buttons, so an album
+# post loses the [📖 Перевод][🔗 Источник] buttons (links move into the caption).
+# Turn on only if you prefer multiple photos over buttons.
+ALBUMS_ENABLED = "false"
 
 # Learn audience taste from 👍/👎 reactions and fold it into ranking (reviewed
 # once a day). Requires reactions enabled on the channel.

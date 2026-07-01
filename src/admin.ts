@@ -6,9 +6,11 @@ import { applyWatermark, fetchOgImage, generateImage, makeImagePrompt } from './
 import { isQuietHours, localHour } from './schedule';
 import { publishTranslatedArticle } from './telegraph';
 import {
+  type AlbumPhoto,
   getChat,
   getChatMember,
   getMe,
+  sendMediaGroup,
   sendMessage,
   sendPhoto,
 } from './telegram';
@@ -85,34 +87,45 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
 
     // --- 4. Telegraph-статья с переводом (если включено) ---
     let articleUrl: string | null = null;
+    let articleImages: string[] = [];
     if (cfg.telegraphEnabled) {
       const tracker = await createTracker(env.DB, cfg);
       const article = await publishTranslatedArticle(env, cfg, item, tracker);
       articleUrl = article?.url ?? null;
+      articleImages = article?.images ?? [];
       spent += tracker.spentThisRun;
       steps.push(articleUrl ? 'Telegraph-статья с переводом: ' + articleUrl : '⚠️ Статью собрать не удалось (мало текста/недоступна)');
     }
 
-    // --- 5. Вотермарка + отправка тестового поста админу в личку ---
-    const markup = cfg.buttonsEnabled
-      ? { inline_keyboard: buildButtons(item.link, cfg, articleUrl) }
-      : undefined;
-    const caption = cfg.buttonsEnabled
-      ? buildBody(captionBody)
-      : buildCaption(captionBody, item.link, cfg, articleUrl);
-    if (photo) {
-      if (typeof photo === 'string') {
-        await sendPhoto(env, admin, photo, caption, markup);
-      } else {
-        const watermarked = await applyWatermark(env, cfg, photo);
-        steps.push(cfg.watermarkEnabled ? 'Вотермарка @monkeydiary: наложена' : 'Вотермарка: выключена');
-        await sendPhoto(env, admin, watermarked, caption, markup);
-      }
-    } else {
+    // --- 5. Отправка тестового поста админу в личку (как в бою) ---
+    if (!photo) {
+      const markup = cfg.buttonsEnabled ? { inline_keyboard: buildButtons(item.link, cfg, articleUrl) } : undefined;
       const text = cfg.buttonsEnabled ? buildBody(captionBody) : buildMessage(captionBody, item.link, cfg, articleUrl);
       await sendMessage(env, admin, text, markup);
+      steps.push('Отправка (текст) в личку: OK');
+    } else {
+      const aiBytes = typeof photo === 'string' ? null : await applyWatermark(env, cfg, photo);
+      if (aiBytes) steps.push(cfg.watermarkEnabled ? 'Вотермарка @monkeydiary: наложена' : 'Вотермарка: выключена');
+
+      let sent = false;
+      if (cfg.albumsEnabled && aiBytes && articleImages.length > 0 && cfg.articleMaxImages > 0) {
+        const photos: AlbumPhoto[] = [{ media: aiBytes, caption: buildCaption(captionBody, item.link, cfg, articleUrl) }];
+        for (const src of articleImages.slice(0, cfg.articleMaxImages)) photos.push({ media: src });
+        try {
+          await sendMediaGroup(env, admin, photos);
+          sent = true;
+          steps.push('Формат: альбом (у медиагрупп нет кнопок — ссылки в подписи)');
+        } catch (e) {
+          steps.push('⚠️ Альбом не удался: ' + String(e));
+        }
+      }
+      if (!sent) {
+        const markup = cfg.buttonsEnabled ? { inline_keyboard: buildButtons(item.link, cfg, articleUrl) } : undefined;
+        const cap = cfg.buttonsEnabled ? buildBody(captionBody) : buildCaption(captionBody, item.link, cfg, articleUrl);
+        await sendPhoto(env, admin, aiBytes ?? (photo as string), cap, markup);
+        steps.push(cfg.buttonsEnabled ? 'Формат: фото + кнопки' : 'Формат: фото, ссылки в подписи');
+      }
     }
-    steps.push('Отправка тестового поста в личку: OK');
 
     // --- 6. Проверка связи с каналом ---
     try {

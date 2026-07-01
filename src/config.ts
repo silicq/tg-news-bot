@@ -96,7 +96,9 @@ export function loadConfig(env: Env, overrides: Record<string, string> = {}): Co
     // links inside the caption text (cleaner look).
     buttonsEnabled: bool(env.BUTTONS_ENABLED, true),
     rubricsEnabled: bool(env.RUBRICS_ENABLED, true),
-    albumsEnabled: bool(env.ALBUMS_ENABLED, true),
+    // Off by default: albums (media groups) can't have inline buttons, so a
+    // single photo + buttons is the consistent default. Enable for multi-photo.
+    albumsEnabled: bool(env.ALBUMS_ENABLED, false),
     reactionsEnabled: bool(env.REACTIONS_ENABLED, true),
     historyRetentionDays: num(env.HISTORY_RETENTION_DAYS, 30),
     est: {
