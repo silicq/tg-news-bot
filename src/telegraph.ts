@@ -142,8 +142,9 @@ export function extractArticle(
   const pushImage = (rawSrc: string | null, caption?: string): void => {
     if (!rawSrc) return;
     const abs = absoluteUrl(baseUrl, decodeEntities(rawSrc));
-    if (isUsableImage(abs) && !seenImages.has(abs)) {
-      seenImages.add(abs);
+    const key = imageKey(abs); // de-dup by filename (same image at different sizes)
+    if (isUsableImage(abs) && !seenImages.has(key)) {
+      seenImages.add(key);
       blocks.push({ type: 'img', src: abs, caption: caption || undefined });
     }
   };
@@ -169,6 +170,9 @@ export function extractArticle(
         }
         break;
       }
+      // Drop the duplicated title and site boilerplate ("reviewed per editorial
+      // process", fact-check notes, credits) without stopping extraction.
+      if (isJunkParagraph(text, title)) continue;
       if (tag === 'p') {
         if (text.length >= 60) {
           blocks.push({ type: 'p', text });
@@ -190,6 +194,26 @@ function imageSrc(tag: string): string | null {
   );
 }
 
+/** Filename (last path segment) — used to de-dup the same image at different sizes. */
+function imageKey(url: string): string {
+  try {
+    return new URL(url).pathname.split('/').pop() || url;
+  } catch {
+    return url;
+  }
+}
+
+// Boilerplate paragraphs that appear inside the body (esp. phys.org / Science X):
+// the editorial-review note, fact-check credits, wire-service/copyright lines.
+const BOILERPLATE =
+  /(reviewed in accordance|editorial process|editors highlighted|the following attributes|has been reviewed|fact[- ]check|proofread|trustworthy source|peer[- ]reviewed publication|associated press|all rights reserved|getty images|©\s*\d{4}|distributed by)/i;
+
+function isJunkParagraph(text: string, title: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (title && t === title.trim().toLowerCase()) return true; // duplicated headline
+  return BOILERPLATE.test(text);
+}
+
 /** Collect YouTube video IDs (iframes, watch/short links, data attrs) as watch URLs. */
 function extractYouTube(html: string): string[] {
   const ids = new Set<string>();
@@ -203,7 +227,9 @@ function extractYouTube(html: string): string[] {
 
 function isUsableImage(url: string): boolean {
   if (!/^https?:\/\//i.test(url)) return false;
-  return !/(\.svg|data:|sprite|logo|icon|avatar|pixel|spacer|1x1|tracking|blank|newsletter|signup|sign-up|leaderboard|banner|advert|promo|subscribe|donate|footer|header|widget|placeholder|gravatar|emoji)/i.test(url);
+  // Reject icons/ads/UI + author photos (/profiles/, headshot, avatar) and
+  // related-article thumbnails (/tmb/, thumb) that aren't part of this article.
+  return !/(\.svg|data:|sprite|logo|icon|avatar|pixel|spacer|1x1|tracking|blank|newsletter|signup|sign-up|leaderboard|banner|advert|promo|subscribe|donate|footer|header|widget|placeholder|gravatar|emoji|profile|headshot|portrait|reviewer|byline|\/tmb\/|thumb)/i.test(url);
 }
 
 // --- Telegraph node tree ---
