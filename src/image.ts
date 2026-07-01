@@ -44,10 +44,10 @@ export async function acquireImage(
     return promptCache;
   };
 
-  const generate = async (model: string, neuronCost: number): Promise<Uint8Array | null> => {
+  const generate = async (model: string, neuronCost: number, steps: number): Promise<Uint8Array | null> => {
     try {
       const prompt = await getPrompt();
-      const bytes = await generateImage(env, cfg, model, prompt);
+      const bytes = await generateImage(env, cfg, model, prompt, steps);
       budget.spend(neuronCost);
       return bytes;
     } catch (e) {
@@ -56,8 +56,9 @@ export async function acquireImage(
     }
   };
 
+  const tryPrimary = (): Promise<Uint8Array | null> => generate(cfg.imageModel, cfg.est.image, cfg.imageSteps);
   const tryFallbackModel = (): Promise<Uint8Array | null> =>
-    cfg.imageModelFallback ? generate(cfg.imageModelFallback, cfg.est.imageFallback) : Promise.resolve(null);
+    cfg.imageModelFallback ? generate(cfg.imageModelFallback, cfg.est.imageFallback, cfg.imageStepsFallback) : Promise.resolve(null);
 
   const canPrimary = (): boolean =>
     !budget.isLow() && budget.canAfford(cfg.est.imagePrompt + cfg.est.image);
@@ -66,7 +67,7 @@ export async function acquireImage(
     const og = await fetchOgImage(item.link);
     if (og) return { kind: 'url', url: og };
     if (canPrimary()) {
-      const b = await generate(cfg.imageModel, cfg.est.image);
+      const b = await tryPrimary();
       if (b) return { kind: 'bytes', bytes: b };
     }
     const fb = await tryFallbackModel();
@@ -76,7 +77,7 @@ export async function acquireImage(
 
   // mode === 'generate'
   if (canPrimary()) {
-    const b = await generate(cfg.imageModel, cfg.est.image);
+    const b = await tryPrimary();
     if (b) return { kind: 'bytes', bytes: b };
   } else {
     log(`budget low (remaining ${budget.remaining()}); switching to free fallback model`);
@@ -112,19 +113,19 @@ export async function makeImagePrompt(env: Env, cfg: Config, item: FeedItem): Pr
 }
 
 /** Per-model input shape (schemas differ across model families). */
-function buildImageInputs(model: string, cfg: Config, prompt: string): Record<string, unknown> {
+function buildImageInputs(model: string, cfg: Config, prompt: string, steps: number): Record<string, unknown> {
   if (/flux-1-schnell/i.test(model)) {
     // flux-1-schnell: only prompt + steps, always square output.
-    return { prompt, steps: cfg.imageSteps };
+    return { prompt, steps: Math.min(8, steps) };
   }
   if (/flux/i.test(model)) {
-    // flux-2 family (klein/dev): prompt + steps + width/height (16:9 capable).
-    return { prompt, steps: cfg.imageSteps, width: cfg.imageWidth, height: cfg.imageHeight };
+    // flux-2 family: prompt + steps + width/height.
+    return { prompt, steps, width: cfg.imageWidth, height: cfg.imageHeight };
   }
   // SDXL / SD1.5 / dreamshaper family: num_steps + width/height.
   return {
     prompt,
-    num_steps: cfg.imageStepsFallback,
+    num_steps: steps,
     width: cfg.imageWidth,
     height: cfg.imageHeight,
   };
@@ -140,8 +141,9 @@ export async function generateImage(
   cfg: Config,
   model: string,
   prompt: string,
+  steps: number,
 ): Promise<Uint8Array> {
-  const out = await aiRun(env)(model, buildImageInputs(model, cfg, prompt));
+  const out = await aiRun(env)(model, buildImageInputs(model, cfg, prompt, steps));
 
   if (out instanceof ReadableStream) {
     return new Uint8Array(await new Response(out).arrayBuffer());

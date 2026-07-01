@@ -78,7 +78,8 @@ export async function publishTranslatedArticle(
     budget.spend(cfg.est.translate);
 
     const translatedTitle = (translated[0] || item.title).slice(0, 256);
-    const nodes = buildNodes(blocks, translated, item, cfg);
+    const videos = extractYouTube(html);
+    const nodes = buildNodes(blocks, translated, item, cfg, videos);
 
     const url = await createPage(token, translatedTitle, cfg, nodes);
     if (!url) return null;
@@ -189,6 +190,17 @@ function imageSrc(tag: string): string | null {
   );
 }
 
+/** Collect YouTube video IDs (iframes, watch/short links, data attrs) as watch URLs. */
+function extractYouTube(html: string): string[] {
+  const ids = new Set<string>();
+  const url = /(?:youtube(?:-nocookie)?\.com\/(?:embed\/|watch\?v=|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/gi;
+  const attr = /(?:videoid|data-videoid|data-video-id|data-ytid)\s*=\s*["']([A-Za-z0-9_-]{11})["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = url.exec(html)) !== null) ids.add(m[1]);
+  while ((m = attr.exec(html)) !== null) ids.add(m[1]);
+  return [...ids].slice(0, 3).map((id) => `https://www.youtube.com/watch?v=${id}`);
+}
+
 function isUsableImage(url: string): boolean {
   if (!/^https?:\/\//i.test(url)) return false;
   return !/(\.svg|data:|sprite|logo|icon|avatar|pixel|spacer|1x1|tracking|blank|newsletter|signup|sign-up|leaderboard|banner|advert|promo|subscribe|donate|footer|header|widget|placeholder|gravatar|emoji)/i.test(url);
@@ -196,7 +208,13 @@ function isUsableImage(url: string): boolean {
 
 // --- Telegraph node tree ---
 
-function buildNodes(blocks: Block[], translated: string[], item: FeedItem, cfg: Config): Node[] {
+function buildNodes(
+  blocks: Block[],
+  translated: string[],
+  item: FeedItem,
+  cfg: Config,
+  videos: string[] = [],
+): Node[] {
   const nodes: Node[] = [];
   let t = 1; // translated[0] is the title; block strings follow in order
 
@@ -212,6 +230,17 @@ function buildNodes(blocks: Block[], translated: string[], item: FeedItem, cfg: 
       const text = translated[t++] || block.text || '';
       if (!text) continue;
       nodes.push({ tag: block.type === 'h' ? 'h3' : 'p', children: [text] });
+    }
+  }
+
+  // Embedded videos (YouTube) from the original — Telegraph renders these players.
+  if (videos.length) {
+    nodes.push({ tag: 'p', children: [{ tag: 'b', children: ['🎬 Видео'] }] });
+    for (const v of videos) {
+      nodes.push({
+        tag: 'figure',
+        children: [{ tag: 'iframe', attrs: { src: `/embed/youtube?url=${encodeURIComponent(v)}` } }],
+      });
     }
   }
 

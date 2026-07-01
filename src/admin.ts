@@ -71,7 +71,7 @@ export async function handleTest(env: Env, cfg: Config): Promise<void> {
     try {
       const prompt = await makeImagePrompt(env, cfg, item);
       spent += cfg.est.imagePrompt;
-      photo = await generateImage(env, cfg, cfg.imageModel, prompt);
+      photo = await generateImage(env, cfg, cfg.imageModel, prompt, cfg.imageSteps);
       spent += cfg.est.image;
       steps.push(`Image-модель (${cfg.imageModel}): OK`);
     } catch (e) {

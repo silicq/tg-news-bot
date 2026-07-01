@@ -72,11 +72,11 @@ export function loadConfig(env: Env, overrides: Record<string, string> = {}): Co
     dailyNeuronBudget: num(env.DAILY_NEURON_BUDGET, 9000),
     textModel: str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast'),
     translateModel: str(env.TRANSLATE_MODEL, str(env.TEXT_MODEL, '@cf/meta/llama-3.1-8b-instruct-fast')),
-    imageModel: str(env.IMAGE_MODEL, '@cf/black-forest-labs/flux-2-klein-4b'),
+    imageModel: str(env.IMAGE_MODEL, '@cf/stabilityai/stable-diffusion-xl-base-1.0'),
     // Free diffusion model used when the neuron budget is low or the primary
     // model fails. Keeps the AI-generated look (unlike og:image).
     imageModelFallback: str(env.IMAGE_MODEL_FALLBACK, '@cf/bytedance/stable-diffusion-xl-lightning'),
-    imageSteps: Math.max(1, num(env.IMAGE_STEPS, 6)),
+    imageSteps: Math.max(1, num(env.IMAGE_STEPS, 20)),
     imageStepsFallback: Math.max(1, num(env.IMAGE_STEPS_FALLBACK, 8)),
     // Target dimensions for models that accept width/height (SDXL family).
     // NOTE: flux-1-schnell ignores these and always returns a square image.

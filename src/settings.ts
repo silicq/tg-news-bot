@@ -33,6 +33,7 @@ export const SETTINGS: SettingDef[] = [
   { key: 'WATERMARK_OPACITY', label: 'Прозрачность WM', type: 'float', category: 'images' },
 
   { key: 'TELEGRAPH_ENABLED', label: 'Статья-перевод', type: 'bool', category: 'article' },
+  { key: 'TRANSLATE_MODEL', label: 'Модель перевода', type: 'text', category: 'article' },
   { key: 'ARTICLE_MAX_BLOCKS', label: 'Макс. блоков', type: 'int', category: 'article' },
   { key: 'ARTICLE_MAX_IMAGES', label: 'Фото в альбоме', type: 'int', category: 'article' },
 

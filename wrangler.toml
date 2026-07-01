@@ -113,12 +113,13 @@ DAILY_NEURON_BUDGET = "9000"
 # Text model: cheap + fast. Swap to @cf/meta/llama-3.3-70b-instruct-fp8-fast
 # for higher-quality ranking if your budget allows.
 TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
-# Primary image model: flux-2-klein-4b — flux "AI look", higher quality, and
-# it honours width/height so posts come out 16:9. (flux-1-schnell is cheaper but
-# square-only — switch back to it if you want to save neurons.)
-IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b"
-# Steps for the primary flux model. 6 = good quality/speed for klein.
-IMAGE_STEPS = "6"
+# Primary image model: SDXL base — good quality, honours width/height (16:9),
+# works with the standard binding. NOTE: flux-2-klein looks great but needs a
+# multipart request the simple binding doesn't do (AiError 5006); flux-1-schnell
+# works but is square-only. For a lighter/faster option use the lightning model.
+IMAGE_MODEL = "@cf/stabilityai/stable-diffusion-xl-base-1.0"
+# num_steps for the primary SDXL model (max 20 for sdxl-base). Higher = better.
+IMAGE_STEPS = "20"
 
 # Free fallback image model. Used when the neuron budget is low or the primary
 # model fails — keeps the AI-generated look (instead of jumping to og:image).
